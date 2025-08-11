@@ -1,52 +1,40 @@
-# =========================
-# Flutter / Dart
-# =========================
-.dart_tool/
-.packages
-build/
-flutter_*.png
-pubspec.lock
-.flutter-plugins
-.flutter-plugins-dependencies
-generated_plugin_registrant.dart
+/*                       # 先忽略一切
+!/.gitignore
+!/README.md
+!/LICENSE
 
-# Android
-android/.gradle/
-android/captures/
-android/app/*.keystore
-android/key.properties
-android/local.properties
-android/app/google-services.json
-android/build/
-android/app/build/
+# ===== my_new_app 仅保留 =====
+!/my_new_app/
+!/my_new_app/android/
+!/my_new_app/android/**
+!/my_new_app/lib/
+!/my_new_app/lib/**
+!/my_new_app/backend/
+!/my_new_app/backend/**
 
-# =========================
-# Node.js / Backend
-# =========================
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-lock.yaml
+# ===== tutor_admin_app 仅保留 =====
+!/tutor_admin_app/
+!/tutor_admin_app/android/
+!/tutor_admin_app/android/**
+!/tutor_admin_app/lib/
+!/tutor_admin_app/lib/**
+!/tutor_admin_app/backend/
+!/tutor_admin_app/backend/**
 
-# Env / Config
-.env
-.env.local
-.env.development.local
-.env.production.local
-.env.test.local
+# ===== 在 android 内部排除构建/敏感文件 =====
+my_new_app/android/.gradle/
+my_new_app/android/build/
+my_new_app/android/app/build/
+my_new_app/android/local.properties
+my_new_app/android/app/*.keystore
+my_new_app/android/key.properties
+my_new_app/android/app/google-services.json
 
-# =========================
-# OS / IDE
-# =========================
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.iml
+tutor_admin_app/android/.gradle/
+tutor_admin_app/android/build/
+tutor_admin_app/android/app/build/
+tutor_admin_app/android/local.properties
+tutor_admin_app/android/app/*.keystore
+tutor_admin_app/android/key.properties
+tutor_admin_app/android/app/google-services.json
 
-# Logs / Temp
-logs/
-*.log
-tmp/
-temp/
