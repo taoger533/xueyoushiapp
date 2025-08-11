@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- 使用自定义的启动页背景 -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- 禁用深色模式下的反色 -->
+        <!-- 全屏显示启动页 -->
+        <!-- 允许绘制系统状态栏背景（避免黑边） -->
+        <!-- 刘海屏/挖孔屏内容可延伸至短边 -->
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+    <!-- Theme applied to the Android Window as soon as the process has started.
+         This theme determines the color of the Android Window while your
+         Flutter UI initializes, as well as behind your Flutter UI while it's running.
+         This Theme is only used starting with V2 of Flutter's Android embedding. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- 正常运行时窗口背景为系统默认背景色 -->
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>
