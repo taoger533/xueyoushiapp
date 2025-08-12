@@ -52,7 +52,7 @@ router.put('/:id', async (req, res) => {
 });
 
 /**
- * 获取教员列表（带筛选）：
+ * 获取教员列表（带筛选、会员优先、分页）：
  * 支持 query 参数：
  * - teachMethod: '线上' | '线下' | '全部'（或不传）
  * - province, city：地区（通常仅线下需要）
@@ -60,6 +60,7 @@ router.put('/:id', async (req, res) => {
  * - subject: 科目（'全部' 或 具体：语文/数学/...）
  * - gender: 性别（'全部' | '男' | '女'）
  * - titleFilter: 0/1/2/3；其中 3 同时满足 1 与 2 的查询含义
+ * - page, limit: 分页参数（可选）
  */
 router.get('/', async (req, res) => {
   try {
@@ -71,6 +72,8 @@ router.get('/', async (req, res) => {
       subject,       // 语文/数学/.../全部
       gender,        // 男/女/全部
       titleFilter,   // 0/1/2/3
+      page,
+      limit,
     } = req.query;
 
     // 1) 组装 Teacher 基础查询条件
@@ -100,14 +103,14 @@ router.get('/', async (req, res) => {
       query['subjects.subject'] = subject;
     }
 
-    // 2) 查 Teacher
-    const teachers = await Teacher.find(query).sort({ createdAt: -1 }).lean();
+    // 2) 查 Teacher（先不排序，lean 方便合并）
+    const teachers = await Teacher.find(query).lean();
 
-    // 3) 取出所有有效 userId 并查 User 的 acceptingStudents 与 titleCode
+    // 3) 查关联 User 的 acceptingStudents、titleCode、isMember
     const userIds = teachers.map(t => t.userId).filter(Boolean);
     const users = await User.find(
       { _id: { $in: userIds } },
-      'acceptingStudents titleCode'
+      'acceptingStudents titleCode isMember'
     ).lean();
 
     // 4) 构造 user 映射表
@@ -116,12 +119,13 @@ router.get('/', async (req, res) => {
       acc[u._id.toString()] = {
         acceptingStudents: !!u.acceptingStudents,
         titleCode: code,
+        isMember: !!u.isMember,
         titles: titleCodeMap[code] || [],
       };
       return acc;
     }, {});
 
-    // 5) 合并 user 信息回 teacher，并先得到基础列表
+    // 5) 合并 user 信息
     let merged = teachers.map(t => {
       const key = t.userId ? t.userId.toString() : '';
       const userInfo = userMap[key] ?? {};
@@ -130,6 +134,7 @@ router.get('/', async (req, res) => {
         acceptingStudents: userInfo.acceptingStudents ?? false,
         titleCode: userInfo.titleCode ?? 0,
         titles: userInfo.titles ?? [],
+        isMember: userInfo.isMember ?? false,
       };
     });
 
@@ -138,15 +143,32 @@ router.get('/', async (req, res) => {
       const tf = parseInt(titleFilter, 10);
       merged = merged.filter((item) => {
         const c = item.titleCode ?? 0;
-        if (tf === 3) return c === 3;          // 只要 code==3
-        if (tf === 1) return c === 1 || c === 3; // 专业教员 或 复合
-        if (tf === 2) return c === 2 || c === 3; // 学霸大学生 或 复合
-        if (tf === 0) return c === 0;          // 仅普通教员
+        if (tf === 3) return c === 3;             // 只要 code==3
+        if (tf === 1) return c === 1 || c === 3;  // 专业教员 或 复合
+        if (tf === 2) return c === 2 || c === 3;  // 学霸大学生 或 复合
+        if (tf === 0) return c === 0;             // 仅普通教员
         return true;
       });
     }
 
-    res.json(merged);
+    // 7) 会员优先排序，其次按创建时间倒序（createdAt 在 Teacher 文档上）
+    merged.sort((a, b) => {
+      if (a.isMember === b.isMember) {
+        const da = a.createdAt ? new Date(a.createdAt) : 0;
+        const db = b.createdAt ? new Date(b.createdAt) : 0;
+        return db - da;
+      }
+      return (b.isMember ? 1 : 0) - (a.isMember ? 1 : 0);
+    });
+
+    // 8) 分页
+    const p = parseInt(page, 10) > 0 ? parseInt(page, 10) : 1;
+    const l = parseInt(limit, 10) > 0 ? parseInt(limit, 10) : 20;
+    const start = (p - 1) * l;
+    const total = merged.length;
+    const data = merged.slice(start, start + l);
+
+    res.json({ total, data, page: p, limit: l });
   } catch (err) {
     console.error('获取失败:', err);
     res.status(500).json({ error: '获取失败' });

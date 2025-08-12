@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Student = require('../models/Student');
+const User = require('../models/User');
 
 // 发布学生信息（用于首次发布）
 router.post('/', async (req, res) => {
@@ -43,13 +44,13 @@ router.put('/:id', async (req, res) => {
 });
 
 /**
- * 获取学生列表，并支持筛选：
+ * 获取学生列表，并支持筛选和分页：
  * - teachMethod: '线上' | '线下' | '全部'
  * - province, city: 地区（仅在线下模式传入）
  * - phase: 学段（小学/初中/高中/全部）
  * - subject: 科目（语文/数学/.../全部）
  * - gender: 学生性别（男/女/全部）
- * 返回时仅包括公开学生（isPublic=true），按照发布时间倒序排序。
+ * 返回时仅包括公开学生（isPublic=true），会员优先排列。
  */
 router.get('/', async (req, res) => {
   try {
@@ -60,33 +61,58 @@ router.get('/', async (req, res) => {
       phase,
       subject,
       gender,
+      page,
+      limit,
     } = req.query;
 
     const query = { isPublic: true };
-    // 授课方式筛选，允许 teachMethod=线上/线下，只返回对应模式或全部
     if (teachMethod && teachMethod !== '全部') {
       query.teachMethod = { $in: [teachMethod, '全部'] };
     }
-    // 地区筛选（通常仅线下需要）
     if (province && city) {
       query.province = province;
       query.city = city;
     }
-    // 学段筛选
     if (phase && phase !== '全部') {
       query['subjects.phase'] = phase;
     }
-    // 科目筛选
     if (subject && subject !== '全部') {
       query['subjects.subject'] = subject;
     }
-    // 学员性别筛选
     if (gender && gender !== '全部') {
       query.gender = gender;
     }
 
-    const students = await Student.find(query).sort({ createdAt: -1 });
-    res.json(students);
+    // 按创建时间倒序先查出全部数据（lean 方便后续处理）
+    const students = await Student.find(query).sort({ createdAt: -1 }).lean();
+    // 取出关联 userIds
+    const userIds = students.map(s => s.userId).filter(Boolean);
+    const users = await User.find(
+      { _id: { $in: userIds } },
+      'isMember'
+    ).lean();
+    const userMap = users.reduce((acc, u) => {
+      acc[u._id.toString()] = !!u.isMember;
+      return acc;
+    }, {});
+    // 合并会员信息
+    let merged = students.map(s => {
+      const key = s.userId ? s.userId.toString() : '';
+      return { ...s, isMember: userMap[key] ?? false };
+    });
+    // 按会员优先排序，再保持创建时间倒序
+    merged.sort((a, b) => {
+      if (a.isMember === b.isMember) {
+        return 0; // 保持原有按 createdAt 倒序的顺序
+      }
+      return (b.isMember ? 1 : 0) - (a.isMember ? 1 : 0);
+    });
+    // 分页处理
+    const p = parseInt(page) || 1;
+    const l = parseInt(limit) || 20;
+    const start = (p - 1) * l;
+    const paginated = merged.slice(start, start + l);
+    res.json({ total: merged.length, data: paginated });
   } catch (err) {
     console.error('获取失败:', err);
     res.status(500).json({ error: '获取失败' });
