@@ -5,6 +5,7 @@ import '../config.dart';
 import 'dart:convert';
 import 'teacher_detail_page.dart';
 import '../components/teacher_card.dart';
+import '../components/teacher_filter_bar.dart';
 import '../components/area_selector.dart';
 
 class TeacherListPage extends StatefulWidget {
@@ -29,6 +30,25 @@ class _TeacherListPageState extends State<TeacherListPage>
   Set<String> bookedTargetIds = {};
   String? currentProvince;
   String? currentCity;
+
+  // 新增筛选项及选项集合
+  String selectedPhase = '全部';
+  String selectedSubject = '全部';
+  String selectedGender = '全部';
+  final List<String> phases = ['全部', '小学', '初中', '高中', '大学'];
+  final List<String> subjects = [
+    '全部',
+    '语文',
+    '数学',
+    '英语',
+    '物理',
+    '化学',
+    '生物',
+    '历史',
+    '地理',
+    '政治'
+  ];
+  final List<String> genders = ['全部', '男', '女'];
 
   bool get _isOnlineTab => _tabController.index == 0;
 
@@ -242,6 +262,33 @@ class _TeacherListPageState extends State<TeacherListPage>
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
               ),
             ),
+          // 新增筛选栏
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: TeacherFilterBar(
+              selectedPhase: selectedPhase,
+              selectedSubject: selectedSubject,
+              selectedGender: selectedGender,
+              phases: phases,
+              subjects: subjects,
+              genders: genders,
+              onPhaseChanged: (val) {
+                setState(() {
+                  selectedPhase = val ?? '全部';
+                });
+              },
+              onSubjectChanged: (val) {
+                setState(() {
+                  selectedSubject = val ?? '全部';
+                });
+              },
+              onGenderChanged: (val) {
+                setState(() {
+                  selectedGender = val ?? '全部';
+                });
+              },
+            ),
+          ),
           Expanded(
             child: teachers.isEmpty
                 ? const Center(child: Text('暂无教员信息'))
@@ -249,6 +296,7 @@ class _TeacherListPageState extends State<TeacherListPage>
                     itemCount: teachers.length,
                     itemBuilder: (context, index) {
                       final t = teachers[index];
+                      if (!_matchesFilters(t)) return const SizedBox.shrink();
                       final isBooked =
                           bookedTargetIds.contains(t['_id'].toString());
                       return TeacherCard(
@@ -285,5 +333,34 @@ class _TeacherListPageState extends State<TeacherListPage>
       default:
         return '老师列表';
     }
+  }
+
+  bool _matchesFilters(Map<String, dynamic> t) {
+    if (selectedGender != '全部' && t['gender'] != selectedGender) {
+      return false;
+    }
+    if (selectedPhase != '全部') {
+      bool phaseMatch = false;
+      final subs = t['subjects'] as List<dynamic>;
+      for (final s in subs) {
+        if (s['phase'] == selectedPhase) {
+          phaseMatch = true;
+          break;
+        }
+      }
+      if (!phaseMatch) return false;
+    }
+    if (selectedSubject != '全部') {
+      bool subjectMatch = false;
+      final subs = t['subjects'] as List<dynamic>;
+      for (final s in subs) {
+        if (s['subject'] == selectedSubject) {
+          subjectMatch = true;
+          break;
+        }
+      }
+      if (!subjectMatch) return false;
+    }
+    return true;
   }
 }
