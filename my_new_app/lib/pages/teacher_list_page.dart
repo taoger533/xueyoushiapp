@@ -7,6 +7,7 @@ import 'teacher_detail_page.dart';
 import '../components/teacher_card.dart';
 import '../components/teacher_filter_bar.dart';
 import '../components/area_selector.dart';
+import '../components/refresh_paged_list.dart';
 
 class TeacherListPage extends StatefulWidget {
   final bool isOnline;
@@ -25,6 +26,7 @@ class TeacherListPage extends StatefulWidget {
 class _TeacherListPageState extends State<TeacherListPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late TabController _tabController;
+
   List<Map<String, dynamic>> teachers = [];
   String? currentUserId;
   Set<String> bookedTargetIds = {};
@@ -34,7 +36,6 @@ class _TeacherListPageState extends State<TeacherListPage>
   String? selectedPhase = '全部';
   String? selectedSubject = '全部';
   String? selectedGender = '全部';
-
   final List<String> phaseOptions = ['全部', '小学', '初中', '高中'];
   final List<String> subjectOptions = [
     '全部',
@@ -49,22 +50,29 @@ class _TeacherListPageState extends State<TeacherListPage>
   ];
   final List<String> genderOptions = ['全部', '男', '女'];
 
+  int _page = 1;
+  final int _limit = 20;
+  int _total = 0;
+  bool _isLoading = false;
+  bool _hasMore = true;
+
   bool get _isOnlineTab => _tabController.index == 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _tabController = TabController(
       length: 2,
       vsync: this,
       initialIndex: widget.isOnline ? 0 : 1,
-    );
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) return;
-      _fetchTeachersForCurrentTab();
-      setState(() {});
-    });
+    )..addListener(() {
+        if (_tabController.indexIsChanging) return;
+        _resetAndFetch();
+        setState(() {});
+      });
+
     _loadUserIdAndCity();
   }
 
@@ -92,31 +100,34 @@ class _TeacherListPageState extends State<TeacherListPage>
       currentProvince = province;
       currentCity = city;
     });
+    await _resetAndFetch();
     if (userId != null) {
-      await _fetchTeachersForCurrentTab();
       await fetchBookings(userId);
-    } else {
-      await _fetchTeachersForCurrentTab();
     }
   }
 
-  Future<void> _fetchTeachersForCurrentTab() async {
-    await fetchTeachers(
-      currentProvince,
-      currentCity,
-      isOnlineTab: _isOnlineTab,
-    );
+  Future<void> _resetAndFetch() async {
+    setState(() {
+      _page = 1;
+      _total = 0;
+      _hasMore = true;
+      teachers = [];
+    });
+    await _fetchTeachers();
   }
 
-  Future<void> fetchTeachers(String? province, String? city,
-      {required bool isOnlineTab}) async {
+  Future<void> _fetchTeachers({bool nextPage = false}) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
     try {
       final queryParameters = <String, String>{};
-      final method = isOnlineTab ? '线上' : '线下';
+      final method = _isOnlineTab ? '线上' : '线下';
       queryParameters['teachMethod'] = method;
-      if (!isOnlineTab) {
-        if (province != null) queryParameters['province'] = province;
-        if (city != null) queryParameters['city'] = city;
+
+      if (!_isOnlineTab) {
+        if (currentProvince != null) queryParameters['province'] = currentProvince!;
+        if (currentCity != null) queryParameters['city'] = currentCity!;
       }
       if (widget.titleFilter != null) {
         queryParameters['titleFilter'] = widget.titleFilter.toString();
@@ -130,15 +141,30 @@ class _TeacherListPageState extends State<TeacherListPage>
       if (selectedGender != null) {
         queryParameters['gender'] = selectedGender!;
       }
+
+      final pageToLoad = nextPage ? (_page + 1) : _page;
+      queryParameters['page'] = pageToLoad.toString();
+      queryParameters['limit'] = _limit.toString();
+
       final uri = Uri.parse('$apiBase/api/teachers')
           .replace(queryParameters: queryParameters);
       final response = await http.get(uri);
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List<dynamic>;
-        final casted = data
+        final obj = jsonDecode(response.body) as Map<String, dynamic>;
+        final List<dynamic> dataList = obj['data'] ?? [];
+        final int total = (obj['total'] ?? 0) as int;
+
+        final newItems = dataList
             .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
             .toList();
-        setState(() => teachers = casted);
+
+        setState(() {
+          _total = total;
+          _page = pageToLoad;
+          teachers = [...teachers, ...newItems];
+          _hasMore = teachers.length < _total;
+        });
       } else {
         throw Exception('获取失败：${response.statusCode}');
       }
@@ -147,6 +173,8 @@ class _TeacherListPageState extends State<TeacherListPage>
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('加载失败: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -233,11 +261,7 @@ class _TeacherListPageState extends State<TeacherListPage>
                           currentProvince = province;
                           currentCity = city;
                         });
-                        await fetchTeachers(
-                          province,
-                          city,
-                          isOnlineTab: _isOnlineTab,
-                        );
+                        await _resetAndFetch();
                       },
                     ),
                   ),
@@ -261,49 +285,46 @@ class _TeacherListPageState extends State<TeacherListPage>
             selectedPhase: selectedPhase,
             selectedSubject: selectedSubject,
             selectedGender: selectedGender,
-            onPhaseChanged: (value) {
-              setState(() {
-                selectedPhase = value ?? '全部';
-              });
-              _fetchTeachersForCurrentTab();
+            onPhaseChanged: (value) async {
+              setState(() => selectedPhase = value ?? '全部');
+              await _resetAndFetch();
             },
-            onSubjectChanged: (value) {
-              setState(() {
-                selectedSubject = value ?? '全部';
-              });
-              _fetchTeachersForCurrentTab();
+            onSubjectChanged: (value) async {
+              setState(() => selectedSubject = value ?? '全部');
+              await _resetAndFetch();
             },
-            onGenderChanged: (value) {
-              setState(() {
-                selectedGender = value ?? '全部';
-              });
-              _fetchTeachersForCurrentTab();
+            onGenderChanged: (value) async {
+              setState(() => selectedGender = value ?? '全部');
+              await _resetAndFetch();
             },
           ),
           Expanded(
-            child: teachers.isEmpty
-                ? const Center(child: Text('暂无教员信息'))
-                : ListView.builder(
-                    itemCount: teachers.length,
-                    itemBuilder: (context, index) {
-                      final t = teachers[index];
-                      final isBooked =
-                          bookedTargetIds.contains(t['_id'].toString());
-                      return TeacherCard(
-                        teacher: t,
-                        isBooked: isBooked,
-                        onBook: () => _appointTeacher(t),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => TeacherDetailPage(teacher: t),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
+            child: RefreshPagedList(
+              itemCount: teachers.length,
+              itemBuilder: (context, index) {
+                final t = teachers[index];
+                final isBooked = bookedTargetIds.contains(t['_id'].toString());
+                return TeacherCard(
+                  teacher: t,
+                  isBooked: isBooked,
+                  onBook: () => _appointTeacher(t),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => TeacherDetailPage(teacher: t),
+                      ),
+                    );
+                  },
+                );
+              },
+              onRefresh: _resetAndFetch,
+              onLoadMore: () => _fetchTeachers(nextPage: true),
+              isLoading: _isLoading,
+              hasMore: _hasMore,
+              empty: const Text('暂无教员信息'),
+              padding: const EdgeInsets.only(bottom: 8),
+            ),
           ),
         ],
       ),
