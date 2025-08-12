@@ -236,16 +236,6 @@ class _StudentListPageState extends State<StudentListPage>
       ),
       body: Column(
         children: [
-          if (showAreaSelector &&
-              currentProvince != null &&
-              currentCity != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                '当前地区：$currentProvince $currentCity',
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ),
           Expanded(
             child: students.isEmpty
                 ? const Center(child: Text('暂无学生信息'))

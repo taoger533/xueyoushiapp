@@ -254,16 +254,6 @@ class _TeacherListPageState extends State<TeacherListPage>
       ),
       body: Column(
         children: [
-          if (showAreaSelector &&
-              currentProvince != null &&
-              currentCity != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 4),
-              child: Text(
-                '当前地区：$currentProvince $currentCity',
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-            ),
           TeacherFilterBar(
             phases: phaseOptions,
             subjects: subjectOptions,
