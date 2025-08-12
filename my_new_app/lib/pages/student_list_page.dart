@@ -6,14 +6,11 @@ import 'dart:convert';
 import 'student_detail_page.dart';
 import '../components/area_selector.dart';
 import '../components/teacher_filter_bar.dart';
+import '../components/refresh_paged_list.dart';
 
-/// 学生需求列表页。
-///
-/// 与教员列表类似，通过 TabBar 区分线上/线下学生需求，并添加学段、科目、性别筛选。
+/// 学生需求列表页：分页 + 下拉刷新 + 触底加载 + 学段/科目/性别筛选
 class StudentListPage extends StatefulWidget {
-  /// 进入页面时默认选中的标签：true=线上，false=线下
-  final bool isOnline;
-
+  final bool isOnline; // 进入页面默认tab：true=线上，false=线下
   const StudentListPage({super.key, this.isOnline = false});
 
   @override
@@ -24,7 +21,7 @@ class _StudentListPageState extends State<StudentListPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // 学生列表数据
+  // 列表数据
   List<Map<String, dynamic>> students = [];
   String? currentUserId;
   Set<String> bookedTargetIds = {};
@@ -35,38 +32,36 @@ class _StudentListPageState extends State<StudentListPage>
   String? selectedPhase = '全部';
   String? selectedSubject = '全部';
   String? selectedGender = '全部';
-
   final List<String> phaseOptions = ['全部', '小学', '初中', '高中'];
   final List<String> subjectOptions = [
-    '全部',
-    '语文',
-    '数学',
-    '英语',
-    '物理',
-    '化学',
-    '生物',
-    '历史',
-    '地理'
+    '全部', '语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理'
   ];
   final List<String> genderOptions = ['全部', '男', '女'];
 
-  // 当前选中的 Tab 是否为线上模式（0=线上，1=线下）
+  // 分页
+  int _page = 1;
+  final int _limit = 20;
+  int _total = 0;
+  bool _isLoading = false;
+  bool _hasMore = true;
+
   bool get _isOnlineTab => _tabController.index == 0;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
     _tabController = TabController(
       length: 2,
       vsync: this,
       initialIndex: widget.isOnline ? 0 : 1,
-    );
-    _tabController.addListener(() {
-      if (_tabController.indexIsChanging) return;
-      _fetchStudentsForCurrentTab();
-      setState(() {});
-    });
+    )..addListener(() {
+        if (_tabController.indexIsChanging) return;
+        _resetAndFetch(); // 切换线上/线下时重置并拉取
+        setState(() {});
+      });
+
     _loadUserIdAndCity();
   }
 
@@ -94,32 +89,35 @@ class _StudentListPageState extends State<StudentListPage>
       currentProvince = province;
       currentCity = city;
     });
+    await _resetAndFetch();
     if (userId != null) {
-      await _fetchStudentsForCurrentTab();
       await fetchBookings(userId);
-    } else {
-      await _fetchStudentsForCurrentTab();
     }
   }
 
-  Future<void> _fetchStudentsForCurrentTab() async {
-    await fetchStudents(
-      currentProvince,
-      currentCity,
-      isOnlineTab: _isOnlineTab,
-    );
+  Future<void> _resetAndFetch() async {
+    setState(() {
+      _page = 1;
+      _total = 0;
+      _hasMore = true;
+      students = [];
+    });
+    await _fetchStudents();
   }
 
-  /// 根据当前 Tab 和筛选条件获取学生列表。
-  Future<void> fetchStudents(String? province, String? city,
-      {required bool isOnlineTab}) async {
+  /// 拉取学生列表（与后端分页结构对齐）
+  Future<void> _fetchStudents({bool nextPage = false}) async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
     try {
       final queryParameters = <String, String>{};
-      final method = isOnlineTab ? '线上' : '线下';
+      final method = _isOnlineTab ? '线上' : '线下';
       queryParameters['teachMethod'] = method;
-      if (!isOnlineTab) {
-        if (province != null) queryParameters['province'] = province;
-        if (city != null) queryParameters['city'] = city;
+
+      if (!_isOnlineTab) {
+        if (currentProvince != null) queryParameters['province'] = currentProvince!;
+        if (currentCity != null) queryParameters['city'] = currentCity!;
       }
       if (selectedPhase != null) {
         queryParameters['phase'] = selectedPhase!;
@@ -130,15 +128,30 @@ class _StudentListPageState extends State<StudentListPage>
       if (selectedGender != null) {
         queryParameters['gender'] = selectedGender!;
       }
-      final uri = Uri.parse('$apiBase/api/students')
-          .replace(queryParameters: queryParameters);
+
+      final pageToLoad = nextPage ? (_page + 1) : _page;
+      queryParameters['page'] = pageToLoad.toString();
+      queryParameters['limit'] = _limit.toString();
+
+      final uri =
+          Uri.parse('$apiBase/api/students').replace(queryParameters: queryParameters);
       final response = await http.get(uri);
+
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List<dynamic>;
-        final casted = data
+        final obj = jsonDecode(response.body) as Map<String, dynamic>;
+        final List<dynamic> dataList = obj['data'] ?? [];
+        final int total = (obj['total'] ?? 0) as int;
+
+        final newItems = dataList
             .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
             .toList();
-        setState(() => students = casted);
+
+        setState(() {
+          _total = total;
+          _page = pageToLoad;
+          students = [...students, ...newItems];
+          _hasMore = students.length < _total;
+        });
       } else {
         throw Exception('获取失败：${response.statusCode}');
       }
@@ -147,29 +160,12 @@ class _StudentListPageState extends State<StudentListPage>
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('加载失败: $e')));
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// 获取当前用户的预约记录。
-  Future<void> fetchBookings(String userId) async {
-    try {
-      final url = Uri.parse('$apiBase/api/bookings/from/$userId');
-      final response = await http.get(url);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List<dynamic>;
-        setState(() {
-          bookedTargetIds =
-              data.map((b) => b['targetId'].toString()).toSet();
-        });
-      } else {
-        throw Exception('加载预约记录失败：${response.statusCode}');
-      }
-    } catch (e) {
-      debugPrint('加载预约记录异常: $e');
-    }
-  }
-
-  /// 向学生发送预约。
+  /// 预约
   Future<void> _sendAppointment(Map<String, dynamic> student) async {
     if (currentUserId == null || student['userId'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -216,6 +212,23 @@ class _StudentListPageState extends State<StudentListPage>
     }
   }
 
+  /// 当前用户的预约记录（用于置灰“已预约”）
+  Future<void> fetchBookings(String userId) async {
+    try {
+      final url = Uri.parse('$apiBase/api/bookings/from/$userId');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as List<dynamic>;
+        setState(() {
+          bookedTargetIds =
+              data.map((b) => b['targetId'].toString()).toSet();
+        });
+      } else {
+        throw Exception('加载预约记录失败：${response.statusCode}');
+      }
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     final showAreaSelector = !_isOnlineTab;
@@ -236,11 +249,7 @@ class _StudentListPageState extends State<StudentListPage>
                           currentProvince = province;
                           currentCity = city;
                         });
-                        await fetchStudents(
-                          province,
-                          city,
-                          isOnlineTab: _isOnlineTab,
-                        );
+                        await _resetAndFetch();
                       },
                     ),
                   ),
@@ -249,15 +258,12 @@ class _StudentListPageState extends State<StudentListPage>
             : null,
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: '线上'),
-            Tab(text: '线下'),
-          ],
+          tabs: const [Tab(text: '线上'), Tab(text: '线下')],
         ),
       ),
       body: Column(
         children: [
-          // 筛选栏：学段、科目、性别
+          // 学段/科目/性别 筛选
           TeacherFilterBar(
             phases: phaseOptions,
             subjects: subjectOptions,
@@ -265,78 +271,72 @@ class _StudentListPageState extends State<StudentListPage>
             selectedPhase: selectedPhase,
             selectedSubject: selectedSubject,
             selectedGender: selectedGender,
-            onPhaseChanged: (value) {
-              setState(() {
-                selectedPhase = value ?? '全部';
-              });
-              _fetchStudentsForCurrentTab();
+            onPhaseChanged: (value) async {
+              setState(() => selectedPhase = value ?? '全部');
+              await _resetAndFetch();
             },
-            onSubjectChanged: (value) {
-              setState(() {
-                selectedSubject = value ?? '全部';
-              });
-              _fetchStudentsForCurrentTab();
+            onSubjectChanged: (value) async {
+              setState(() => selectedSubject = value ?? '全部');
+              await _resetAndFetch();
             },
-            onGenderChanged: (value) {
-              setState(() {
-                selectedGender = value ?? '全部';
-              });
-              _fetchStudentsForCurrentTab();
+            onGenderChanged: (value) async {
+              setState(() => selectedGender = value ?? '全部');
+              await _resetAndFetch();
             },
           ),
           Expanded(
-            child: students.isEmpty
-                ? const Center(child: Text('暂无学生信息'))
-                : ListView.builder(
-                    itemCount: students.length,
-                    itemBuilder: (context, index) {
-                      final student = students[index];
-                      final isBooked =
-                          bookedTargetIds.contains(student['_id'].toString());
-                      final subjectList = (student['subjects'] as List)
-                          .map((e) => '${e['phase']} ${e['subject']}')
-                          .join('，');
-                      return Card(
-                        margin: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          title: Text('学生：${student['name']}'),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('性别：${student['gender']}'),
-                              Text('对教员性别要求：${student['tutorGender']}'),
-                              Text('对教员身份要求：${student['tutorIdentity']}'),
-                              Text('报价范围：${student['rateMin']}-${student['rateMax']}'),
-                              Text('上课时长：${student['duration']}小时'),
-                              Text('一周次数：${student['frequency']}次'),
-                              Text('上课地点：${student['region']}'),
-                              Text('学习科目：$subjectList'),
-                            ],
-                          ),
-                          trailing: ElevatedButton(
-                            onPressed: isBooked
-                                ? null
-                                : () => _sendAppointment(student),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  isBooked ? Colors.grey : null,
-                            ),
-                            child: Text(isBooked ? '已预约' : '预约'),
-                          ),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    StudentDetailPage(student: student),
-                              ),
-                            );
-                          },
+            child: RefreshPagedList(
+              itemCount: students.length,
+              itemBuilder: (context, index) {
+                final student = students[index];
+                final isBooked =
+                    bookedTargetIds.contains(student['_id'].toString());
+                final subjectList = (student['subjects'] as List)
+                    .map((e) => '${e['phase']} ${e['subject']}')
+                    .join('，');
+                return Card(
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 8),
+                  child: ListTile(
+                    title: Text('学生：${student['name']}'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('性别：${student['gender']}'),
+                        Text('对教员性别要求：${student['tutorGender']}'),
+                        Text('对教员身份要求：${student['tutorIdentity']}'),
+                        Text('报价范围：${student['rateMin']}-${student['rateMax']}'),
+                        Text('上课时长：${student['duration']}小时'),
+                        Text('一周次数：${student['frequency']}次'),
+                        Text('上课地点：${student['region']}'),
+                        Text('学习科目：$subjectList'),
+                      ],
+                    ),
+                    trailing: ElevatedButton(
+                      onPressed: isBooked ? null : () => _sendAppointment(student),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isBooked ? Colors.grey : null,
+                      ),
+                      child: Text(isBooked ? '已预约' : '预约'),
+                    ),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => StudentDetailPage(student: student),
                         ),
                       );
                     },
                   ),
+                );
+              },
+              onRefresh: _resetAndFetch,
+              onLoadMore: () => _fetchStudents(nextPage: true),
+              isLoading: _isLoading,
+              hasMore: _hasMore,
+              empty: const Text('暂无学生信息'),
+              padding: const EdgeInsets.only(bottom: 8),
+            ),
           ),
         ],
       ),
