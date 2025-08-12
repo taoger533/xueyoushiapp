@@ -9,9 +9,9 @@ import '../components/area_selector.dart';
 /// 教员列表页。
 ///
 /// 页面内通过 TabBar 区分线上/线下教员列表，同时支持按照教员头衔过滤。
-/// 当切换到线上模式时会额外显示教员接收学生状态与头衔。
+/// 无论线上或线下模式，展示逻辑均一致：仅在教员暂停接收学生时显示红色角标提示。
 class TeacherListPage extends StatefulWidget {
-  /// 进入页面时默认选中的标签：true=线上，false=线下（仅作为默认 Tab，不再是单独页面）
+  /// 进入页面时默认选中的标签：true=线上，false=线下
   final bool isOnline;
 
   /// 头衔过滤 code（0~3），例如 1 = 专业教员，2 = 学霸大学生
@@ -54,9 +54,8 @@ class _TeacherListPageState extends State<TeacherListPage>
 
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) return;
-      // 切换标签后刷新数据
       _fetchTeachersForCurrentTab();
-      setState(() {}); // 触发 AppBar actions 与顶部地区提示的显示切换
+      setState(() {});
     });
 
     _loadUserIdAndCity();
@@ -71,7 +70,6 @@ class _TeacherListPageState extends State<TeacherListPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 当从后台恢复时，重新读取本地省市并刷新列表
     if (state == AppLifecycleState.resumed) {
       _loadUserIdAndCity();
     }
@@ -138,7 +136,7 @@ class _TeacherListPageState extends State<TeacherListPage>
           return regionMatch && matchMethod && matchTitle;
         }).toList();
 
-        // 将动态列表转换为 Map 列表，避免后续类型转换报错
+        // 转换为 Map 列表，避免类型转换报错
         final casted = filtered
             .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
             .toList();
@@ -163,8 +161,7 @@ class _TeacherListPageState extends State<TeacherListPage>
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as List<dynamic>;
         setState(() {
-          bookedTargetIds =
-              data.map((b) => b['targetId'].toString()).toSet();
+          bookedTargetIds = data.map((b) => b['targetId'].toString()).toSet();
         });
       } else {
         throw Exception('加载预约记录失败：${response.statusCode}');
@@ -174,11 +171,11 @@ class _TeacherListPageState extends State<TeacherListPage>
     }
   }
 
-  /// 向某个教员发送预约。
+  /// 预约指定教员。
   Future<void> _appointTeacher(Map<String, dynamic> teacher) async {
     if (currentUserId == null || teacher['userId'] == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先登录或数据缺失')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请先登录或数据缺失')));
       return;
     }
 
@@ -209,7 +206,8 @@ class _TeacherListPageState extends State<TeacherListPage>
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('预约成功')));
-        setState(() => bookedTargetIds.add(teacher['_id'].toString()));
+        setState(() =>
+            bookedTargetIds.add(teacher['_id'].toString()));
       } else {
         final data = jsonDecode(response.body);
         if (!mounted) return;
@@ -274,7 +272,8 @@ class _TeacherListPageState extends State<TeacherListPage>
               padding: const EdgeInsets.only(top: 8, bottom: 4),
               child: Text(
                 '当前地区：$currentProvince $currentCity',
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
+                style:
+                    const TextStyle(fontSize: 14, color: Colors.grey),
               ),
             ),
           Expanded(
@@ -284,7 +283,8 @@ class _TeacherListPageState extends State<TeacherListPage>
                     itemCount: teachers.length,
                     itemBuilder: (context, index) {
                       final t = teachers[index];
-                      final isBooked = bookedTargetIds.contains(t['_id'].toString());
+                      final isBooked =
+                          bookedTargetIds.contains(t['_id'].toString());
                       final subjectList = (t['subjects'] as List)
                           .map((s) => '${s['phase']} ${s['subject']}')
                           .join('，');
@@ -293,14 +293,15 @@ class _TeacherListPageState extends State<TeacherListPage>
                       final List<String> titles =
                           (t['titles'] as List?)?.cast<String>() ?? [];
 
-                      // 构建显示教员头衔的标签列表。
+                      // 构建显示教员头衔的 Chip 列表。
                       final List<Widget> chipWidgets = [];
                       for (final tt in titles) {
                         chipWidgets.add(
                           Chip(
                             label: Text(
                               tt,
-                              style: const TextStyle(fontSize: 12),
+                              style:
+                                  const TextStyle(fontSize: 12),
                             ),
                           ),
                         );
@@ -314,12 +315,14 @@ class _TeacherListPageState extends State<TeacherListPage>
                             child: ListTile(
                               title: Text('教员：${t['name']}'),
                               subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   if (chipWidgets.isNotEmpty)
                                     Padding(
                                       padding:
-                                          const EdgeInsets.only(bottom: 6.0),
+                                          const EdgeInsets.only(
+                                              bottom: 6.0),
                                       child: Wrap(
                                         spacing: 6,
                                         runSpacing: 4,
@@ -337,44 +340,53 @@ class _TeacherListPageState extends State<TeacherListPage>
                                 ],
                               ),
                               trailing: ElevatedButton(
-                                onPressed:
-                                    isBooked ? null : () => _appointTeacher(t),
+                                onPressed: isBooked
+                                    ? null
+                                    : () => _appointTeacher(t),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      isBooked ? Colors.grey : null,
+                                  backgroundColor: isBooked
+                                      ? Colors.grey
+                                      : null,
                                 ),
-                                child: Text(isBooked ? '已预约' : '预约'),
+                                child:
+                                    Text(isBooked ? '已预约' : '预约'),
                               ),
                               onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) =>
-                                        TeacherDetailPage(teacher: t),
+                                        TeacherDetailPage(
+                                            teacher: t),
                                   ),
                                 );
                               },
                             ),
                           ),
-                          // 任意模式下如果教员不再接受学生，显示红色角标提示“已有学生，暂停接收”。
+                          // 如果不再接受学生，统一显示红色角标。
                           if (!accepting)
                             Positioned(
                               top: 0,
                               left: 0,
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 4),
+                                padding:
+                                    const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4),
                                 decoration: const BoxDecoration(
                                   color: Colors.red,
                                   borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(4),
-                                    bottomRight: Radius.circular(4),
+                                    topLeft:
+                                        Radius.circular(4),
+                                    bottomRight:
+                                        Radius.circular(4),
                                   ),
                                 ),
                                 child: const Text(
                                   '已有学生，暂停接收',
                                   style: TextStyle(
-                                      color: Colors.white, fontSize: 12),
+                                      color: Colors.white,
+                                      fontSize: 12),
                                 ),
                               ),
                             ),

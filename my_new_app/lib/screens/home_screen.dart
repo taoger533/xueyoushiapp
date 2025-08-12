@@ -172,7 +172,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (widget.role == 'teacher') ...[
-                  // 教师身份：学生列表合并为一个入口（页内 Tab 切换线上/线下）
+                  // 教师身份：学生列表入口
                   Row(
                     children: [
                       buildWideButton(
@@ -182,8 +182,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const StudentListPage(
-                                // 仅控制进入页面时默认选中标签；进入后可在页内切换
-                                isOnline: false, // 默认先显示线下，可改 true 为默认线上
+                                isOnline: false, // 默认先显示线下
                               ),
                             ),
                           );
@@ -201,7 +200,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                     child: const Text('登记教员信息'),
                   ),
                 ] else if (widget.role == 'student') ...[
-                  // 学生身份：老师列表合并为一个入口（页内 Tab 切换线上/线下）
+                  // 学生身份：老师列表入口
                   Row(
                     children: [
                       buildWideButton(
@@ -211,8 +210,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                             context,
                             MaterialPageRoute(
                               builder: (_) => const TeacherListPage(
-                                // 仅控制进入页面时默认选中标签；进入后可在页内切换
-                                isOnline: false, // 默认先显示线下，可改 true 为默认线上
+                                isOnline: false, // 默认线下
                               ),
                             ),
                           );
@@ -221,44 +219,64 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  // 快捷筛选：专业教员/学霸大学生（进入后仍可在页内切换线上/线下）
-                  Row(
-                    children: [
-                      buildWideButton(
-                        text: '专业教员列表',
-                        backgroundColor: Colors.blue,
-                        onPressed: () {
-                          const filter = 1;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const TeacherListPage(
-                                isOnline: false,
-                                titleFilter: filter,
+                  // 快捷筛选：普通教员/专业教员/学霸大学生
+                    Row(
+                      children: [
+                        // 普通教员按钮（灰色）
+                        buildWideButton(
+                          text: '普通教员列表',
+                          backgroundColor: Colors.grey,
+                          onPressed: () {
+                            const filter = 0;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const TeacherListPage(
+                                  isOnline: false,
+                                  titleFilter: filter,
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 12),
-                      buildWideButton(
-                        text: '学霸大学生',
-                        backgroundColor: Colors.green,
-                        onPressed: () {
-                          const filter = 2;
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const TeacherListPage(
-                                isOnline: false,
-                                titleFilter: filter,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        // 专业教员按钮（蓝色）
+                        buildWideButton(
+                          text: '专业教员列表',
+                          backgroundColor: Colors.blue,
+                          onPressed: () {
+                            const filter = 1;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const TeacherListPage(
+                                  isOnline: false,
+                                  titleFilter: filter,
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 12),
+                        // 学霸大学生按钮（绿色）
+                        buildWideButton(
+                          text: '学霸大学生',
+                          backgroundColor: Colors.green,
+                          onPressed: () {
+                            const filter = 2;
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const TeacherListPage(
+                                  isOnline: false,
+                                  titleFilter: filter,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   const SizedBox(height: 20),
                   ElevatedButton(
                     onPressed: () => Navigator.pushNamed(context, '/publish_student'),
