@@ -5,6 +5,7 @@ import '../pages/teachers_page.dart';
 import '../pages/students_page.dart';
 import '../pages/professional_cert_page.dart'; // 专业教员认证管理页面
 import '../pages/top_student_cert_page.dart'; // 学霸大学生认证管理页面
+import '../pages/orders_page.dart'; // 订单管理页面
 
 class DashboardPage extends StatelessWidget {
   final String? role;
@@ -119,6 +120,26 @@ class DashboardPage extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const TopStudentCertPage()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 订单管理
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.receipt_long),
+                  label: const Text('订单管理'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.green,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const OrdersPage()),
                     );
                   },
                 ),

@@ -1,5 +1,7 @@
 const express = require('express');
 const User = require('../models/User');
+// 引入 ConfirmedBooking 模型用于订单管理（已确认预约）
+const ConfirmedBooking = require('../models/ConfirmedBooking');
 
 const router = express.Router();
 
@@ -123,6 +125,39 @@ router.delete('/user/:id', async (req, res) => {
     res.json({ message: '用户已删除' });
   } catch (err) {
     console.error('删除用户失败:', err);
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+/**
+ * 获取所有订单（已确认预约）
+ * GET /api/admin/orders
+ */
+router.get('/orders', async (req, res) => {
+  try {
+    // 按创建时间倒序返回全部已确认预约作为订单列表
+    const orders = await ConfirmedBooking.find().sort({ _id: -1 });
+    res.json(orders);
+  } catch (err) {
+    console.error('获取订单列表失败:', err);
+    res.status(500).json({ error: '服务器错误' });
+  }
+});
+
+/**
+ * 删除订单（已确认预约）
+ * DELETE /api/admin/order/:id
+ */
+router.delete('/order/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const order = await ConfirmedBooking.findByIdAndDelete(id);
+    if (!order) {
+      return res.status(404).json({ error: '订单不存在' });
+    }
+    res.json({ message: '订单已删除' });
+  } catch (err) {
+    console.error('删除订单失败:', err);
     res.status(500).json({ error: '服务器错误' });
   }
 });
