@@ -6,6 +6,10 @@ import 'dart:convert';
 import 'teacher_detail_page.dart';
 import '../components/area_selector.dart';
 
+/// 教员列表页。
+///
+/// 页面内通过 TabBar 区分线上/线下教员列表，同时支持按照教员头衔过滤。
+/// 当切换到线上模式时会额外显示教员接收学生状态与头衔。
 class TeacherListPage extends StatefulWidget {
   /// 进入页面时默认选中的标签：true=线上，false=线下（仅作为默认 Tab，不再是单独页面）
   final bool isOnline;
@@ -27,13 +31,15 @@ class _TeacherListPageState extends State<TeacherListPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  List<dynamic> teachers = [];
+  // 教员列表数据
+  List<Map<String, dynamic>> teachers = [];
   String? currentUserId;
   Set<String> bookedTargetIds = {};
   String? currentProvince;
   String? currentCity;
 
-  bool get _isOnlineTab => _tabController.index == 0; // 0=线上，1=线下
+  // 当前选中的 Tab 是否为线上模式（0=线上，1=线下）
+  bool get _isOnlineTab => _tabController.index == 0;
 
   @override
   void initState() {
@@ -99,6 +105,7 @@ class _TeacherListPageState extends State<TeacherListPage>
     );
   }
 
+  /// 根据当前 Tab（线上/线下）筛选教员列表。
   Future<void> fetchTeachers(String? province, String? city,
       {required bool isOnlineTab}) async {
     try {
@@ -106,10 +113,10 @@ class _TeacherListPageState extends State<TeacherListPage>
       final response = await http.get(uri);
 
       if (response.statusCode == 200) {
-        final all = jsonDecode(response.body) as List;
+        final all = jsonDecode(response.body) as List<dynamic>;
         final allowMethod = isOnlineTab ? '线上' : '线下';
 
-        final filtered = all.where((t) {
+        final filtered = all.where((dynamic t) {
           final method = t['teachMethod'] as String? ?? '';
           // 线下需要匹配省市；线上不限制地域
           final regionMatch = isOnlineTab ||
@@ -131,7 +138,12 @@ class _TeacherListPageState extends State<TeacherListPage>
           return regionMatch && matchMethod && matchTitle;
         }).toList();
 
-        setState(() => teachers = filtered);
+        // 将动态列表转换为 Map 列表，避免后续类型转换报错
+        final casted = filtered
+            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
+            .toList();
+
+        setState(() => teachers = casted);
       } else {
         throw Exception('获取失败：${response.statusCode}');
       }
@@ -143,12 +155,13 @@ class _TeacherListPageState extends State<TeacherListPage>
     }
   }
 
+  /// 获取当前用户的预约记录。
   Future<void> fetchBookings(String userId) async {
     try {
       final url = Uri.parse('$apiBase/api/bookings/from/$userId');
       final response = await http.get(url);
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body) as List<dynamic>;
         setState(() {
           bookedTargetIds =
               data.map((b) => b['targetId'].toString()).toSet();
@@ -161,6 +174,7 @@ class _TeacherListPageState extends State<TeacherListPage>
     }
   }
 
+  /// 向某个教员发送预约。
   Future<void> _appointTeacher(Map<String, dynamic> teacher) async {
     if (currentUserId == null || teacher['userId'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -195,7 +209,7 @@ class _TeacherListPageState extends State<TeacherListPage>
         if (!mounted) return;
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('预约成功')));
-        setState(() => bookedTargetIds.add(teacher['_id']));
+        setState(() => bookedTargetIds.add(teacher['_id'].toString()));
       } else {
         final data = jsonDecode(response.body);
         if (!mounted) return;
@@ -270,15 +284,27 @@ class _TeacherListPageState extends State<TeacherListPage>
                     itemCount: teachers.length,
                     itemBuilder: (context, index) {
                       final t = teachers[index];
-                      final isBooked = bookedTargetIds.contains(t['_id']);
+                      final isBooked = bookedTargetIds.contains(t['_id'].toString());
                       final subjectList = (t['subjects'] as List)
                           .map((s) => '${s['phase']} ${s['subject']}')
                           .join('，');
                       final accepting =
                           t['acceptingStudents'] as bool? ?? false;
-                      final titles = (t['titles'] as List<dynamic>?)
-                              ?.cast<String>() ??
-                          [];
+                      final List<String> titles =
+                          (t['titles'] as List?)?.cast<String>() ?? [];
+
+                      // 构建显示教员头衔的标签列表。
+                      final List<Widget> chipWidgets = [];
+                      for (final tt in titles) {
+                        chipWidgets.add(
+                          Chip(
+                            label: Text(
+                              tt,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        );
+                      }
 
                       return Stack(
                         children: [
@@ -290,22 +316,14 @@ class _TeacherListPageState extends State<TeacherListPage>
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (titles.isNotEmpty)
+                                  if (chipWidgets.isNotEmpty)
                                     Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 6.0),
                                       child: Wrap(
                                         spacing: 6,
                                         runSpacing: 4,
-                                        children: titles
-                                            .map((tt) => Chip(
-                                                  label: Text(
-                                                    tt,
-                                                    style: const TextStyle(
-                                                        fontSize: 12),
-                                                  ),
-                                                ))
-                                            .toList(),
+                                        children: chipWidgets,
                                       ),
                                     ),
                                   Text('性别：${t['gender']}'),
@@ -338,6 +356,7 @@ class _TeacherListPageState extends State<TeacherListPage>
                               },
                             ),
                           ),
+                          // 任意模式下如果教员不再接受学生，显示红色角标提示“已有学生，暂停接收”。
                           if (!accepting)
                             Positioned(
                               top: 0,
@@ -369,6 +388,7 @@ class _TeacherListPageState extends State<TeacherListPage>
     );
   }
 
+  /// 根据教员头衔编号返回中文描述。
   String _titleName(int titleCode) {
     switch (titleCode) {
       case 0:
