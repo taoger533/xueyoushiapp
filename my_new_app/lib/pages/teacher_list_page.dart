@@ -31,12 +31,12 @@ class _TeacherListPageState extends State<TeacherListPage>
   String? currentProvince;
   String? currentCity;
 
-  // 新增筛选项及选项集合
-  String selectedPhase = '全部';
-  String selectedSubject = '全部';
-  String selectedGender = '全部';
-  final List<String> phases = ['全部', '小学', '初中', '高中', '大学'];
-  final List<String> subjects = [
+  String? selectedPhase = '全部';
+  String? selectedSubject = '全部';
+  String? selectedGender = '全部';
+
+  final List<String> phaseOptions = ['全部', '小学', '初中', '高中'];
+  final List<String> subjectOptions = [
     '全部',
     '语文',
     '数学',
@@ -45,10 +45,9 @@ class _TeacherListPageState extends State<TeacherListPage>
     '化学',
     '生物',
     '历史',
-    '地理',
-    '政治'
+    '地理'
   ];
-  final List<String> genders = ['全部', '男', '女'];
+  final List<String> genderOptions = ['全部', '男', '女'];
 
   bool get _isOnlineTab => _tabController.index == 0;
 
@@ -112,38 +111,41 @@ class _TeacherListPageState extends State<TeacherListPage>
   Future<void> fetchTeachers(String? province, String? city,
       {required bool isOnlineTab}) async {
     try {
-      final uri = Uri.parse('$apiBase/api/teachers');
+      final queryParameters = <String, String>{};
+      final method = isOnlineTab ? '线上' : '线下';
+      queryParameters['teachMethod'] = method;
+      if (!isOnlineTab) {
+        if (province != null) queryParameters['province'] = province;
+        if (city != null) queryParameters['city'] = city;
+      }
+      if (widget.titleFilter != null) {
+        queryParameters['titleFilter'] = widget.titleFilter.toString();
+      }
+      if (selectedPhase != null) {
+        queryParameters['phase'] = selectedPhase!;
+      }
+      if (selectedSubject != null) {
+        queryParameters['subject'] = selectedSubject!;
+      }
+      if (selectedGender != null) {
+        queryParameters['gender'] = selectedGender!;
+      }
+      final uri = Uri.parse('$apiBase/api/teachers')
+          .replace(queryParameters: queryParameters);
       final response = await http.get(uri);
       if (response.statusCode == 200) {
-        final all = jsonDecode(response.body) as List<dynamic>;
-        final allowMethod = isOnlineTab ? '线上' : '线下';
-        final filtered = all.where((dynamic t) {
-          final method = t['teachMethod'] as String? ?? '';
-          final regionMatch = isOnlineTab ||
-              (province != null &&
-                  city != null &&
-                  t['province'] == province &&
-                  t['city'] == city);
-          final matchMethod = method == '全部' || method == allowMethod;
-          final code = t['titleCode'];
-          final filter = widget.titleFilter;
-          final matchTitle = filter == null ||
-              code == filter ||
-              (filter == 1 && code == 3) ||
-              (filter == 2 && code == 3);
-          return regionMatch && matchMethod && matchTitle;
-        }).toList();
-        final casted = filtered
+        final data = jsonDecode(response.body) as List<dynamic>;
+        final casted = data
             .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
             .toList();
         setState(() => teachers = casted);
       } else {
         throw Exception('获取失败：${response.statusCode}');
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('加载失败')));
+            .showSnackBar(SnackBar(content: Text('加载失败: $e')));
       }
     }
   }
@@ -262,32 +264,31 @@ class _TeacherListPageState extends State<TeacherListPage>
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
               ),
             ),
-          // 新增筛选栏
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: TeacherFilterBar(
-              selectedPhase: selectedPhase,
-              selectedSubject: selectedSubject,
-              selectedGender: selectedGender,
-              phases: phases,
-              subjects: subjects,
-              genders: genders,
-              onPhaseChanged: (val) {
-                setState(() {
-                  selectedPhase = val ?? '全部';
-                });
-              },
-              onSubjectChanged: (val) {
-                setState(() {
-                  selectedSubject = val ?? '全部';
-                });
-              },
-              onGenderChanged: (val) {
-                setState(() {
-                  selectedGender = val ?? '全部';
-                });
-              },
-            ),
+          TeacherFilterBar(
+            phases: phaseOptions,
+            subjects: subjectOptions,
+            genders: genderOptions,
+            selectedPhase: selectedPhase,
+            selectedSubject: selectedSubject,
+            selectedGender: selectedGender,
+            onPhaseChanged: (value) {
+              setState(() {
+                selectedPhase = value ?? '全部';
+              });
+              _fetchTeachersForCurrentTab();
+            },
+            onSubjectChanged: (value) {
+              setState(() {
+                selectedSubject = value ?? '全部';
+              });
+              _fetchTeachersForCurrentTab();
+            },
+            onGenderChanged: (value) {
+              setState(() {
+                selectedGender = value ?? '全部';
+              });
+              _fetchTeachersForCurrentTab();
+            },
           ),
           Expanded(
             child: teachers.isEmpty
@@ -296,7 +297,6 @@ class _TeacherListPageState extends State<TeacherListPage>
                     itemCount: teachers.length,
                     itemBuilder: (context, index) {
                       final t = teachers[index];
-                      if (!_matchesFilters(t)) return const SizedBox.shrink();
                       final isBooked =
                           bookedTargetIds.contains(t['_id'].toString());
                       return TeacherCard(
@@ -333,34 +333,5 @@ class _TeacherListPageState extends State<TeacherListPage>
       default:
         return '老师列表';
     }
-  }
-
-  bool _matchesFilters(Map<String, dynamic> t) {
-    if (selectedGender != '全部' && t['gender'] != selectedGender) {
-      return false;
-    }
-    if (selectedPhase != '全部') {
-      bool phaseMatch = false;
-      final subs = t['subjects'] as List<dynamic>;
-      for (final s in subs) {
-        if (s['phase'] == selectedPhase) {
-          phaseMatch = true;
-          break;
-        }
-      }
-      if (!phaseMatch) return false;
-    }
-    if (selectedSubject != '全部') {
-      bool subjectMatch = false;
-      final subs = t['subjects'] as List<dynamic>;
-      for (final s in subs) {
-        if (s['subject'] == selectedSubject) {
-          subjectMatch = true;
-          break;
-        }
-      }
-      if (!subjectMatch) return false;
-    }
-    return true;
   }
 }
