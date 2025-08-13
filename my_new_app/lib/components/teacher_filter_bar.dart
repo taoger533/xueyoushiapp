@@ -1,38 +1,19 @@
 import 'package:flutter/material.dart';
 
-/// 内置筛选数据
-class _FilterData {
-  // 学段
-  static const List<String> phases = [
-    '不限', '小学', '初中', '高中', '大学', '成人',
-  ];
-
-  // 科目（含你截图里的全部）
-  static const List<String> subjects = [
-    '不限',
-    '数学','英语','语文','物理','化学',
-    '生物','地理','历史','政治','作文',
-    '奥数','钢琴','电子琴','古筝','竹笛',
-    '美术','日语','德语','法语','韩语',
-    '俄语','雅思','托福','计算机','英语口语',
-  ];
-
-  // 性别
-  static const List<String> genders = ['不限', '男', '女'];
-}
-
-/// 顶部筛选条：下拉筛选 + 网格快捷科目
-/// - selectedPhase / selectedSubject / selectedGender 由父级管理（可为 null）
-/// - onPhaseChanged / onSubjectChanged / onGenderChanged 回调沿用你现有逻辑
+/// 顶部筛选条：下拉筛选 + 可选的科目快捷网格
+/// 统一规则：用字符串“全部”表示不限；绝不使用 null。
 class TeacherFilterBar extends StatelessWidget {
-  final String? selectedPhase;
-  final String? selectedSubject;
-  final String? selectedGender;
+  // 选中值（务必传“全部”或具体值）
+  final String selectedPhase;
+  final String selectedSubject;
+  final String selectedGender;
+
+  // 变更回调（会把“全部”或具体值原样回传）
   final ValueChanged<String?> onPhaseChanged;
   final ValueChanged<String?> onSubjectChanged;
   final ValueChanged<String?> onGenderChanged;
 
-  /// 是否显示下面的“科目快捷网格”
+  // 是否展示下面的科目快捷网格
   final bool showQuickSubjects;
 
   const TeacherFilterBar({
@@ -46,41 +27,72 @@ class TeacherFilterBar extends StatelessWidget {
     this.showQuickSubjects = true,
   });
 
+  // 内置选项 —— 全部都是 String，且包含“全部”
+  static const List<String> _phases = [
+    '全部', '小学', '初中', '高中', '大学', '成人',
+  ];
+
+  static const List<String> _subjects = [
+    '全部',
+    '数学','英语','语文','物理','化学',
+    '生物','地理','历史','政治','作文',
+    '奥数','钢琴','电子琴','古筝','竹笛',
+    '美术','日语','德语','法语','韩语',
+    '俄语','雅思','托福','计算机','英语口语',
+  ];
+
+  static const List<String> _genders = ['全部', '男', '女'];
+
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // 顶部三项：学段 / 科目 / 性别
+        // 三个下拉
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
           child: Row(
             children: [
               Expanded(
-                child: DropdownButtonFormField<String?>(
-                  value: selectedPhase,
+                child: DropdownButtonFormField<String>(
+                  value: _ensureInList(selectedPhase, _phases),
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: '学段'),
-                  items: _buildNullableItems(_FilterData.phases),
+                  items: _phases
+                      .map((e) => DropdownMenuItem<String>(
+                            value: e,
+                            child: Text(e),
+                          ))
+                      .toList(),
                   onChanged: onPhaseChanged,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: DropdownButtonFormField<String?>(
-                  value: selectedSubject,
+                child: DropdownButtonFormField<String>(
+                  value: _ensureInList(selectedSubject, _subjects),
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: '科目'),
-                  items: _buildNullableItems(_FilterData.subjects),
+                  items: _subjects
+                      .map((e) => DropdownMenuItem<String>(
+                            value: e,
+                            child: Text(e),
+                          ))
+                      .toList(),
                   onChanged: onSubjectChanged,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: DropdownButtonFormField<String?>(
-                  value: selectedGender,
+                child: DropdownButtonFormField<String>(
+                  value: _ensureInList(selectedGender, _genders),
                   isExpanded: true,
                   decoration: const InputDecoration(labelText: '性别'),
-                  items: _buildNullableItems(_FilterData.genders),
+                  items: _genders
+                      .map((e) => DropdownMenuItem<String>(
+                            value: e,
+                            child: Text(e),
+                          ))
+                      .toList(),
                   onChanged: onGenderChanged,
                 ),
               ),
@@ -88,7 +100,7 @@ class TeacherFilterBar extends StatelessWidget {
           ),
         ),
 
-        // 快捷科目网格（点击即可快速触发科目筛选，风格贴近你的截图）
+        // 科目快捷网格（不含“全部”）
         if (showQuickSubjects)
           Card(
             margin: const EdgeInsets.fromLTRB(12, 0, 12, 8),
@@ -103,13 +115,12 @@ class TeacherFilterBar extends StatelessWidget {
                   const SizedBox(height: 12),
                   LayoutBuilder(
                     builder: (ctx, c) {
-                      final cross =
-                          c.maxWidth >= 560 ? 5 : (c.maxWidth >= 420 ? 4 : 3);
-                      final subjects = _FilterData.subjects.where((s) => s != '不限').toList();
+                      final quick = _subjects.where((s) => s != '全部').toList();
+                      final cross = c.maxWidth >= 560 ? 5 : 4;
                       return GridView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
-                        itemCount: subjects.length,
+                        itemCount: quick.length,
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: cross,
                           mainAxisSpacing: 10,
@@ -117,17 +128,21 @@ class TeacherFilterBar extends StatelessWidget {
                           childAspectRatio: 2.6,
                         ),
                         itemBuilder: (_, i) {
-                          final s = subjects[i];
+                          final s = quick[i];
                           final isSelected = selectedSubject == s;
                           return OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              backgroundColor:
-                                  isSelected ? Theme.of(context).colorScheme.primary.withOpacity(0.08) : null,
                               side: BorderSide(
                                 color: isSelected
                                     ? Theme.of(context).colorScheme.primary
                                     : Theme.of(context).colorScheme.outlineVariant,
                               ),
+                              backgroundColor: isSelected
+                                  ? Theme.of(context)
+                                      .colorScheme
+                                      .primary
+                                      .withOpacity(0.08)
+                                  : null,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -136,7 +151,6 @@ class TeacherFilterBar extends StatelessWidget {
                             child: Text(
                               s,
                               style: TextStyle(
-                                fontSize: 15,
                                 color: isSelected
                                     ? Theme.of(context).colorScheme.primary
                                     : null,
@@ -151,9 +165,9 @@ class TeacherFilterBar extends StatelessWidget {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton.icon(
-                      onPressed: () => onSubjectChanged(null), // 清空科目
+                      onPressed: () => onSubjectChanged('全部'),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('清空科目'),
+                      label: const Text('清空科目（全部）'),
                     ),
                   ),
                 ],
@@ -164,22 +178,8 @@ class TeacherFilterBar extends StatelessWidget {
     );
   }
 
-  /// 把 "不限" 作为可选项之一；支持传 null 表示“未选择/清空”
-  static List<DropdownMenuItem<String?>> _buildNullableItems(
-      List<String> options) {
-    // 用 null 代表“不限/全部”，下拉里显示成“全部”
-    final items = <DropdownMenuItem<String?>>[
-      const DropdownMenuItem<String?>(
-        value: null,
-        child: Text('全部'),
-      ),
-    ];
-    items.addAll(
-      options.map((e) => DropdownMenuItem<String?>(
-            value: e == '不限' ? null : e,
-            child: Text(e == '不限' ? '全部' : e),
-          )),
-    );
-    return items;
+  /// 兜底：如果传入值不在列表里，强制回退为“全部”，避免 Dropdown 断言报错
+  static String _ensureInList(String value, List<String> options) {
+    return options.contains(value) ? value : '全部';
   }
 }
