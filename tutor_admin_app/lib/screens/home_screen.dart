@@ -6,6 +6,8 @@ import '../pages/students_page.dart';
 import '../pages/professional_cert_page.dart'; // 专业教员认证管理页面
 import '../pages/top_student_cert_page.dart'; // 学霸大学生认证管理页面
 import '../pages/orders_page.dart'; // 订单管理页面
+import '../pages/student_registrations_page.dart'; // 学生登记信息管理
+import '../pages/teacher_registrations_page.dart'; // 教师登记信息管理
 
 class DashboardPage extends StatelessWidget {
   final String? role;
@@ -144,6 +146,47 @@ class DashboardPage extends StatelessWidget {
                   },
                 ),
               ),
+              const SizedBox(height: 20),
+
+              // 学生登记信息管理
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.assignment_ind),
+                  label: const Text('学生登记信息管理'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.purple,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const StudentRegistrationsPage()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 教师登记信息管理
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.assignment_turned_in),
+                  label: const Text('教师登记信息管理'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    backgroundColor: Colors.teal,
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TeacherRegistrationsPage()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
           ),
         ),
