@@ -23,15 +23,59 @@ class _StudentDetailPageState extends State<StudentDetailPage> {
   }
 
   Future<void> _fetchTeacherCount() async {
+    // 后端按 student.userId 查询，这里优先取 userId
+    final dynamic userIdDynamic = widget.student['userId'] ??
+        widget.student['user_id'] ??
+        widget.student['publisherId'];
+
+    if (userIdDynamic == null || userIdDynamic.toString().trim().isEmpty) {
+      setState(() {
+        _errorMsg = '缺少 userId（无法统计老师数量）';
+        _loadingTeachers = false;
+      });
+      return;
+    }
+
+    final String userId = userIdDynamic.toString();
+
     try {
-      final resp = await http.get(
-        Uri.parse('$apiBase/api/confirmedBookings/student/${widget.student['id']}'),
-      );
+      // 注意：confirmed-bookings（有连字符）
+      final uri = Uri.parse('$apiBase/api/confirmed-bookings/student/$userId');
+      final resp = await http.get(uri);
+
+      if (!mounted) return;
+
       if (resp.statusCode == 200) {
-        final List<dynamic> list = json.decode(resp.body);
+        final body = resp.body.trim();
+        if (body.isEmpty) {
+          setState(() {
+            _teacherCount = 0;
+            _loadingTeachers = false;
+          });
+          return;
+        }
+
+        final decoded = json.decode(body);
+
+        int count = 0;
+        if (decoded is List) {
+          count = decoded.length;
+        } else if (decoded is Map<String, dynamic>) {
+          // 兼容返回 { count, items } 或直接 { items: [...] }
+          if (decoded['count'] is int) {
+            count = decoded['count'] as int;
+          } else if (decoded['items'] is List) {
+            count = (decoded['items'] as List).length;
+          } else {
+            // 不认识的结构，当成 0
+            count = 0;
+          }
+        }
+
         setState(() {
-          _teacherCount = list.length;
+          _teacherCount = count;
           _loadingTeachers = false;
+          _errorMsg = null;
         });
       } else {
         setState(() {
@@ -49,30 +93,47 @@ class _StudentDetailPageState extends State<StudentDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 将科目列表格式化
-    final subjectList = (widget.student['subjects'] as List<dynamic>)
-        .map((e) => '${e['phase']} ${e['subject']}')
-        .join('，');
+    // 将科目列表格式化（空值保护）
+    String subjectList = '';
+    final subjects = widget.student['subjects'];
+    if (subjects is List) {
+      subjectList = subjects
+          .map((e) {
+            if (e is Map) {
+              final phase = (e['phase'] ?? '').toString();
+              final subject = (e['subject'] ?? '').toString();
+              if (phase.isEmpty && subject.isEmpty) return null;
+              return [phase, subject].where((s) => s.isNotEmpty).join(' ');
+            }
+            return null;
+          })
+          .where((s) => s != null && s.isNotEmpty)
+          .cast<String>()
+          .join('，');
+    }
 
     return Scaffold(
-      appBar: AppBar(title: Text('学生详情：${widget.student['name']}')),
+      appBar: AppBar(title: Text('学生详情：${widget.student['name'] ?? ''}')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
-            _buildRow('姓名', widget.student['name']),
-            _buildRow('性别', widget.student['gender']),
-            _buildRow('省份', widget.student['province']),
-            _buildRow('城市', widget.student['city']),
-            _buildRow('地址', widget.student['region']),
-            _buildRow('对教员性别要求', widget.student['tutorGender']),
-            _buildRow('对教员身份要求', widget.student['tutorIdentity']),
-            _buildRow('报价范围', '${widget.student['rateMin']}-${widget.student['rateMax']}'),
-            _buildRow('上课时长', '${widget.student['duration']} 小时'),
-            _buildRow('一周次数', '${widget.student['frequency']} 次'),
+            _buildRow('姓名', (widget.student['name'] ?? '').toString()),
+            _buildRow('性别', (widget.student['gender'] ?? '').toString()),
+            _buildRow('省份', (widget.student['province'] ?? '').toString()),
+            _buildRow('城市', (widget.student['city'] ?? '').toString()),
+            _buildRow('地址', (widget.student['region'] ?? '').toString()),
+            _buildRow('对教员性别要求', (widget.student['tutorGender'] ?? '').toString()),
+            _buildRow('对教员身份要求', (widget.student['tutorIdentity'] ?? '').toString()),
+            _buildRow(
+              '报价范围',
+              '${(widget.student['rateMin'] ?? '').toString()}-${(widget.student['rateMax'] ?? '').toString()}',
+            ),
+            _buildRow('上课时长', '${(widget.student['duration'] ?? '').toString()} 小时'),
+            _buildRow('一周次数', '${(widget.student['frequency'] ?? '').toString()} 次'),
             _buildRow('学习科目', subjectList),
             _buildCountRow(),
-            _buildRow('学员详细情况', widget.student['description']),
+            _buildRow('学员详细情况', (widget.student['description'] ?? '').toString()),
           ],
         ),
       ),

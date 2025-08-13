@@ -46,11 +46,14 @@ class SystemMessagesWidgetState extends State<SystemMessagesWidget> {
     try {
       final resp = await http.get(Uri.parse('$apiBase/api/messages/$_userId'));
       if (resp.statusCode == 200) {
-        final List data = jsonDecode(resp.body);
-        for (var msg in data) {
-          await _localDb!.insertMessage(msg);
+        final List<dynamic> data = jsonDecode(resp.body) as List<dynamic>;
+        for (final msg in data) {
+          final mapMsg = (msg is Map)
+              ? Map<String, dynamic>.from(msg as Map)
+              : <String, dynamic>{};
+          await _localDb!.insertMessage(mapMsg);
           await http.post(
-            Uri.parse('$apiBase/api/messages/${msg['_id']}/confirm'),
+            Uri.parse('$apiBase/api/messages/${mapMsg['_id']}/confirm'),
           );
         }
       }
@@ -103,8 +106,9 @@ class SystemMessagesWidgetState extends State<SystemMessagesWidget> {
         content: const Text('确定删除这条系统消息？'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
@@ -157,19 +161,22 @@ class SystemMessagesWidgetState extends State<SystemMessagesWidget> {
         itemBuilder: (context, i) {
           final msg = _messages[i];
 
-          // —— 安全解析 extra 字段 —— 
+          // —— 安全解析 extra 字段 ——
           Map<String, dynamic> extra = {};
           final rawExtra = msg['extra'];
-          if (rawExtra is Map<String, dynamic>) {
-            extra = rawExtra;
+          if (rawExtra is Map) {
+            extra = Map<String, dynamic>.from(rawExtra as Map);
           } else if (rawExtra is String) {
             try {
-              extra = jsonDecode(rawExtra) as Map<String, dynamic>;
+              final decoded = jsonDecode(rawExtra);
+              if (decoded is Map) {
+                extra = Map<String, dynamic>.from(decoded);
+              }
             } catch (_) {
               extra = {};
             }
           }
-          // —— 解析完成 —— 
+          // —— 解析完成 ——
 
           Widget? statusIcon;
           if (msg['status'] == 'confirmed' || msg['read'] == true) {
@@ -180,10 +187,19 @@ class SystemMessagesWidgetState extends State<SystemMessagesWidget> {
 
           // 组装科目文本
           String subjectText = '';
-          if (extra['subjects'] is List) {
-            final List subs = extra['subjects']!;
-            subjectText =
-                subs.map((e) => '${e['phase'] ?? ''}${e['subject'] ?? ''}').join('，');
+          final subjects = (extra['subjects'] is List)
+              ? (extra['subjects'] as List)
+              : const [];
+          if (subjects.isNotEmpty) {
+            subjectText = subjects.map((e) {
+              if (e is Map) {
+                final m = Map<String, dynamic>.from(e);
+                final phase = (m['phase'] as String?) ?? '';
+                final subject = (m['subject'] as String?) ?? '';
+                return '$phase$subject';
+              }
+              return '';
+            }).where((s) => s.isNotEmpty).join('，');
           }
 
           return Card(
@@ -197,7 +213,11 @@ class SystemMessagesWidgetState extends State<SystemMessagesWidget> {
                   if (extra.isNotEmpty) ...[
                     if (extra['name'] != null) Text('称呼：${extra['name']}'),
                     if (subjectText.isNotEmpty) Text('科目：$subjectText'),
-                    if (extra['phone'] != null) Text('手机号：${extra['phone']}'),
+                    // 根据 needMembership 字段决定显示提示还是手机号
+                    if (extra['needMembership'] == true)
+                      const Text('您当前不是会员，暂时无法查看联系方式，请开通会员后再查看。')
+                    else if (extra['phone'] != null)
+                      Text('手机号：${extra['phone']}'),
                   ],
                 ],
               ),

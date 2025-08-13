@@ -28,15 +28,10 @@ class _StudentListPageState extends State<StudentListPage>
   String? currentProvince;
   String? currentCity;
 
-  // 筛选条件
-  String? selectedPhase = '全部';
-  String? selectedSubject = '全部';
-  String? selectedGender = '全部';
-  final List<String> phaseOptions = ['全部', '小学', '初中', '高中'];
-  final List<String> subjectOptions = [
-    '全部', '语文', '数学', '英语', '物理', '化学', '生物', '历史', '地理'
-  ];
-  final List<String> genderOptions = ['全部', '男', '女'];
+  // 筛选条件（与 teacher_filter_bar 内置的默认值对应）
+  String? selectedPhase;
+  String? selectedSubject;
+  String? selectedGender;
 
   // 分页
   int _page = 1;
@@ -119,13 +114,13 @@ class _StudentListPageState extends State<StudentListPage>
         if (currentProvince != null) queryParameters['province'] = currentProvince!;
         if (currentCity != null) queryParameters['city'] = currentCity!;
       }
-      if (selectedPhase != null) {
+      if (selectedPhase != null && selectedPhase!.isNotEmpty) {
         queryParameters['phase'] = selectedPhase!;
       }
-      if (selectedSubject != null) {
+      if (selectedSubject != null && selectedSubject!.isNotEmpty) {
         queryParameters['subject'] = selectedSubject!;
       }
-      if (selectedGender != null) {
+      if (selectedGender != null && selectedGender!.isNotEmpty) {
         queryParameters['gender'] = selectedGender!;
       }
 
@@ -263,24 +258,21 @@ class _StudentListPageState extends State<StudentListPage>
       ),
       body: Column(
         children: [
-          // 学段/科目/性别 筛选
+          // 学段/科目/性别 筛选（使用新版 teacher_filter_bar 内置选项）
           TeacherFilterBar(
-            phases: phaseOptions,
-            subjects: subjectOptions,
-            genders: genderOptions,
             selectedPhase: selectedPhase,
             selectedSubject: selectedSubject,
             selectedGender: selectedGender,
             onPhaseChanged: (value) async {
-              setState(() => selectedPhase = value ?? '全部');
+              setState(() => selectedPhase = value);
               await _resetAndFetch();
             },
             onSubjectChanged: (value) async {
-              setState(() => selectedSubject = value ?? '全部');
+              setState(() => selectedSubject = value);
               await _resetAndFetch();
             },
             onGenderChanged: (value) async {
-              setState(() => selectedGender = value ?? '全部');
+              setState(() => selectedGender = value);
               await _resetAndFetch();
             },
           ),
