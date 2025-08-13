@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Student = require('../models/Student');
-const User = require('../models/User');
+const User = require('../models/User'); // 引入 User 模型
 
 // 发布学生信息（用于首次发布）
 router.post('/', async (req, res) => {
@@ -51,9 +51,19 @@ router.put('/:id', async (req, res) => {
  * - subject: 科目（语文/数学/.../全部）
  * - gender: 学生性别（男/女/全部）
  * 返回时仅包括公开学生（isPublic=true），会员优先排列。
+ *
+ * 新增功能：如果 query 中包含 userId，则直接根据 userId 返回该学生信息（数组形式），兼容
+ * `/api/students?userId=xxx` 的调用。
  */
 router.get('/', async (req, res) => {
   try {
+    // 如果携带 userId，则查询单个学生信息并返回数组
+    if (req.query.userId) {
+      const stu = await Student.findOne({ userId: req.query.userId });
+      if (!stu) return res.json([]);
+      return res.json([stu]);
+    }
+
     const {
       teachMethod,
       province,
@@ -103,7 +113,7 @@ router.get('/', async (req, res) => {
     // 按会员优先排序，再保持创建时间倒序
     merged.sort((a, b) => {
       if (a.isMember === b.isMember) {
-        return 0; // 保持原有按 createdAt 倒序的顺序
+        return 0;
       }
       return (b.isMember ? 1 : 0) - (a.isMember ? 1 : 0);
     });

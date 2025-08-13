@@ -61,9 +61,28 @@ router.put('/:id', async (req, res) => {
  * - gender: 性别（'全部' | '男' | '女'）
  * - titleFilter: 0/1/2/3；其中 3 同时满足 1 与 2 的查询含义
  * - page, limit: 分页参数（可选）
+ *
+ * 新增功能：如果 query 中包含 userId，则直接根据 userId 返回该教员详情（数组形式），兼容 `/api/teachers?userId=xxx` 调用。
  */
 router.get('/', async (req, res) => {
   try {
+    // 当带有 userId 查询参数时，直接查询单个教员信息并返回数组
+    if (req.query.userId) {
+      const teacher = await Teacher.findOne({ userId: req.query.userId }).lean();
+      if (!teacher) return res.json([]);
+      // 查询关联用户信息，组合成前端需要的格式
+      const user = await User.findById(req.query.userId).lean();
+      const code = Number.isInteger(user?.titleCode) ? user.titleCode : 0;
+      const info = {
+        ...teacher,
+        acceptingStudents: !!user?.acceptingStudents,
+        titleCode: code,
+        titles: titleCodeMap[code] || [],
+        isMember: !!user?.isMember,
+      };
+      return res.json([info]);
+    }
+
     const {
       teachMethod,   // 线上/线下/全部
       province,
@@ -138,7 +157,7 @@ router.get('/', async (req, res) => {
       };
     });
 
-    // 6) 头衔过滤（titleFilter）：3 视为同时满足 1 和 2
+    // 6) 头衔过滤（titleFilter）：3 视为同时满足 1 与 2
     if (typeof titleFilter !== 'undefined') {
       const tf = parseInt(titleFilter, 10);
       merged = merged.filter((item) => {
@@ -165,13 +184,12 @@ router.get('/', async (req, res) => {
     const p = parseInt(page, 10) > 0 ? parseInt(page, 10) : 1;
     const l = parseInt(limit, 10) > 0 ? parseInt(limit, 10) : 20;
     const start = (p - 1) * l;
-    const total = merged.length;
-    const data = merged.slice(start, start + l);
+    const paginated = merged.slice(start, start + l);
 
-    res.json({ total, data, page: p, limit: l });
+    res.json({ total: merged.length, data: paginated });
   } catch (err) {
-    console.error('获取失败:', err);
-    res.status(500).json({ error: '获取失败' });
+    console.error('获取教员失败:', err);
+    res.status(500).json({ error: '获取教员失败' });
   }
 });
 
