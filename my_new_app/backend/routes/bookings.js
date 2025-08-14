@@ -6,7 +6,7 @@ const ConfirmedBooking = require('../models/ConfirmedBooking');
 
 const Student = require('../models/Student');
 const Teacher = require('../models/Teacher');
-const User = require('../models/User'); // 获取手机号
+const User = require('../models/User'); // 获取手机号和会员状态
 
 // 创建预约
 router.post('/', async (req, res) => {
@@ -147,27 +147,85 @@ router.patch('/:id', async (req, res) => {
         student: studentInfo
       });
 
-      // ✅ 发送系统消息：发起者收到“你发起的预约已被确认”
-      const msgToOrigin = new Message({
-        fromUserId: booking.toUserId,
-        toUserId: booking.fromUserId,
-        type: 'booking',
-        content: '你发起的预约已被确认',
-        confirmed: false,
-        extra: toSnapshot
-      });
-      await msgToOrigin.save();
+      // 获取发起者和确认者的会员状态
+      const originUser = await User.findById(booking.fromUserId).lean();
+      const confirmerUser = await User.findById(booking.toUserId).lean();
+      const isOriginMember = originUser?.isMember ?? false;
+      const isConfirmerMember = confirmerUser?.isMember ?? false;
 
-      // ✅ 发送系统消息：确认者收到“你已成功确认对方的预约”
-      const msgToConfirmer = new Message({
-        fromUserId: booking.fromUserId,
-        toUserId: booking.toUserId,
-        type: 'booking',
-        content: '你已成功确认对方的预约',
-        confirmed: false,
-        extra: fromSnapshot
-      });
-      await msgToConfirmer.save();
+      // 发给发起者的消息
+      if (isOriginMember) {
+        // 会员直接收到带联系方式的系统消息
+        const msgToOrigin = new Message({
+          fromUserId: booking.toUserId,
+          toUserId: booking.fromUserId,
+          type: 'booking',
+          content: '你发起的预约已被确认',
+          confirmed: false,
+          extra: toSnapshot,
+          memberOnly: false
+        });
+        await msgToOrigin.save();
+      } else {
+        // 非会员先收到提示消息，不含手机号
+        const originPrompt = new Message({
+          fromUserId: booking.toUserId,
+          toUserId: booking.fromUserId,
+          type: 'booking',
+          content: '你发起的预约已被确认，但您尚未成为会员，暂时无法查看对方联系方式，请开通会员后查看',
+          confirmed: false,
+          extra: { ...toSnapshot, phone: undefined },
+          memberOnly: false
+        });
+        await originPrompt.save();
+        // 同时创建一个仅会员可见的带联系方式消息
+        const originWithheld = new Message({
+          fromUserId: booking.toUserId,
+          toUserId: booking.fromUserId,
+          type: 'booking',
+          content: '你发起的预约已被确认',
+          confirmed: false,
+          extra: toSnapshot,
+          memberOnly: true
+        });
+        await originWithheld.save();
+      }
+
+      // 发给确认者的消息
+      if (isConfirmerMember) {
+        const msgToConfirmer = new Message({
+          fromUserId: booking.fromUserId,
+          toUserId: booking.toUserId,
+          type: 'booking',
+          content: '你已成功确认对方的预约',
+          confirmed: false,
+          extra: fromSnapshot,
+          memberOnly: false
+        });
+        await msgToConfirmer.save();
+      } else {
+        // 非会员确认者
+        const confirmerPrompt = new Message({
+          fromUserId: booking.fromUserId,
+          toUserId: booking.toUserId,
+          type: 'booking',
+          content: '你已成功确认对方的预约，但您尚未成为会员，暂时无法查看对方联系方式，请开通会员后查看',
+          confirmed: false,
+          extra: { ...fromSnapshot, phone: undefined },
+          memberOnly: false
+        });
+        await confirmerPrompt.save();
+        const confirmerWithheld = new Message({
+          fromUserId: booking.fromUserId,
+          toUserId: booking.toUserId,
+          type: 'booking',
+          content: '你已成功确认对方的预约',
+          confirmed: false,
+          extra: fromSnapshot,
+          memberOnly: true
+        });
+        await confirmerWithheld.save();
+      }
 
       // 删除预约
       await Booking.findByIdAndDelete(req.params.id);
@@ -182,7 +240,8 @@ router.patch('/:id', async (req, res) => {
         type: 'booking',
         content: '你发起的预约已被拒绝',
         confirmed: false,
-        extra: booking.targetInfo
+        extra: booking.targetInfo,
+        memberOnly: false
       });
       await msgReject.save();
 

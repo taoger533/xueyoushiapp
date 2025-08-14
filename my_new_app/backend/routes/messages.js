@@ -8,45 +8,34 @@ router.get('/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    // 查询当前用户收到的消息
     const messages = await Message.find({ toUserId: userId })
       .sort({ createdAt: -1 })
-      .lean(); // 返回 JSON，可直接前端使用
+      .lean();
 
     // 获取用户会员信息
-    let user;
-    try {
-      user = await User.findById(userId).lean();
-    } catch (e) {
-      user = null;
-    }
+    const user = await User.findById(userId).lean();
     const isMember = user?.isMember ?? false;
 
-    // 根据会员状态处理消息列表：非会员预约相关消息隐藏联系方式并标记提示
-    const processedMessages = messages.map((msg) => {
+    const result = [];
+    for (const msg of messages) {
+      // memberOnly 消息仅会员能看到
+      if (msg.memberOnly && !isMember) {
+        continue;
+      }
       const m = { ...msg };
-      // 非会员情况下，对预约成功/确认预约等 booking 类型消息做处理
-      const needsMask =
-        !isMember &&
-        (m.type === 'booking' ||
-          (typeof m.content === 'string' &&
-            (m.content.includes('预约成功') || m.content.includes('确认预约'))));
-      if (needsMask) {
-        // 深拷贝 extra，避免修改原消息
-        m.extra = m.extra ? { ...m.extra } : {};
-        // 删除手机号
-        if ('phone' in m.extra) {
-          delete m.extra.phone;
-        }
-        // 标记需要会员才能查看联系方式，供前端识别
+      // 非会员时隐藏手机号
+      const hasPhone = m.extra && typeof m.extra === 'object' && m.extra.phone;
+      if (!isMember && hasPhone) {
+        m.extra = { ...m.extra };
+        delete m.extra.phone;
+        // 前端用 needMembership 提示
         m.extra.needMembership = true;
-        // 在内容后附加提示，告知用户需要会员才能查看联系方式
         m.content = `${m.content}（会员可查看联系方式）`;
       }
-      return m;
-    });
+      result.push(m);
+    }
 
-    res.json(processedMessages);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: '加载消息失败' });
   }

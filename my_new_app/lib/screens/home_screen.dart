@@ -8,7 +8,6 @@ import '../pages/student_list_page.dart';
 
 class HomeTab extends StatefulWidget {
   final String role;
-
   const HomeTab({super.key, required this.role});
 
   @override
@@ -23,7 +22,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   List<String> _bannerImages = [];
   bool _loading = true;
 
-  // 网格筛选科目
+  // 首页科目：与列表页筛选条保持一致
   static const List<String> _subjects = [
     '数学','英语','语文','物理','化学',
     '生物','地理','历史','政治','作文',
@@ -63,14 +62,11 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
           _bannerImages = data.map((e) => e as String).toList();
           _loading = false;
         });
-
-        if (_bannerImages.isNotEmpty) {
-          _startAutoScroll();
-        }
+        if (_bannerImages.isNotEmpty) _startAutoScroll();
       } else {
         setState(() => _loading = false);
       }
-    } catch (e) {
+    } catch (_) {
       setState(() => _loading = false);
     }
   }
@@ -78,7 +74,6 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
   void _startAutoScroll() {
     _timer?.cancel();
     if (_bannerImages.isEmpty) return;
-
     _timer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (!mounted) return;
       final nextPage = (_currentPage + 1) % _bannerImages.length;
@@ -87,9 +82,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOut,
       );
-      setState(() {
-        _currentPage = nextPage;
-      });
+      setState(() => _currentPage = nextPage);
     });
   }
 
@@ -104,143 +97,159 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
         style: ElevatedButton.styleFrom(
           minimumSize: const Size.fromHeight(56),
           backgroundColor: backgroundColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          elevation: 2,
+          shadowColor: Colors.black12,
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         child: Text(text, textAlign: TextAlign.center),
       ),
     );
   }
 
-  /// 网格筛选器
-  Widget _buildSubjectGrid() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _subjects.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 4, // 每行4个
-          crossAxisSpacing: 8,
-          mainAxisSpacing: 8,
-          childAspectRatio: 2.6,
+  void _onSubjectTap(String subject) {
+    // 把选中的科目传给对应列表页
+    if (widget.role == 'student') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TeacherListPage(
+            isOnline: false,
+            subject: subject, // ← 传递
+          ),
         ),
-        itemBuilder: (_, i) {
-          final s = _subjects[i];
-          return OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => StudentListPage(
+            isOnline: false,
+            subject: subject, // ← 传递
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildSubjectSection() {
+    final cs = Theme.of(context).colorScheme;
+    return Card
+    (
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      elevation: 0,
+      color: cs.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 20, color: cs.primary),
+                const SizedBox(width: 6),
+                Text('按科目快速筛选',
+                    style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _onSubjectTap('全部'),
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('全部'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: cs.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  ),
+                )
+              ],
             ),
-            onPressed: () {
-              // 根据身份跳转到对应列表页并带上 subject 参数
-              if (widget.role == 'student') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => TeacherListPage(
-                      isOnline: false,
-                      // TeacherListPage 中要接收 subject 参数
-                      // 需要你那边 TeacherListPage 构造函数支持 subject
-                      // 如果没加，先加上
-                    ),
-                  ),
-                );
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => StudentListPage(
-                      isOnline: false,
-                      // 同上，支持 subject
-                    ),
-                  ),
-                );
-              }
-            },
-            child: Text(s),
-          );
-        },
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 12,
+              children: _subjects
+                  .map((s) => _SubjectPill(label: s, onTap: () => _onSubjectTap(s)))
+                  .toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // 顶部轮播公告
-          SizedBox(
-            height: 180,
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _bannerImages.isEmpty
-                    ? const Center(child: Text('暂无公告'))
-                    : Stack(
-                        children: [
-                          PageView.builder(
-                            controller: _pageController,
-                            itemCount: _bannerImages.length,
-                            onPageChanged: (index) {
-                              setState(() {
-                                _currentPage = index;
-                              });
-                            },
-                            itemBuilder: (context, index) {
-                              final fullUrl = '$apiBase${_bannerImages[index]}';
-                              return ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  fullUrl,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  loadingBuilder: (context, child, progress) {
-                                    if (progress == null) return child;
-                                    return const Center(child: CircularProgressIndicator());
-                                  },
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return const Center(child: Icon(Icons.broken_image));
-                                  },
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      children: [
+        SizedBox(
+          height: 180,
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _bannerImages.isEmpty
+                  ? const Center(child: Text('暂无公告'))
+                  : Stack(
+                      children: [
+                        PageView.builder(
+                          controller: _pageController,
+                          itemCount: _bannerImages.length,
+                          onPageChanged: (index) => setState(() => _currentPage = index),
+                          itemBuilder: (context, index) {
+                            final fullUrl = '$apiBase${_bannerImages[index]}';
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.network(
+                                fullUrl,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                loadingBuilder: (context, child, progress) {
+                                  if (progress == null) return child;
+                                  return const Center(child: CircularProgressIndicator());
+                                },
+                                errorBuilder: (_, __, ___) =>
+                                    const Center(child: Icon(Icons.broken_image)),
+                              ),
+                            );
+                          },
+                        ),
+                        Positioned(
+                          bottom: 8,
+                          left: 0,
+                          right: 0,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(_bannerImages.length, (i) {
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                width: _currentPage == i ? 10 : 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: _currentPage == i
+                                      ? cs.primary
+                                      : cs.onPrimary.withOpacity(0.6),
+                                  borderRadius: BorderRadius.circular(3),
                                 ),
                               );
-                            },
+                            }),
                           ),
-                          Positioned(
-                            bottom: 8,
-                            left: 0,
-                            right: 0,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(_bannerImages.length, (i) {
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _currentPage == i ? Colors.orange : Colors.white70,
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
-          ),
+                        ),
+                      ],
+                    ),
+        ),
 
-          const SizedBox(height: 12),
-
-          // 主功能按钮
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16),
+        // 主功能 + 科目筛选卡片
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Column(
               children: [
                 if (widget.role == 'teacher') ...[
                   Row(
                     children: [
                       buildWideButton(
-                        text: '学生列表（合并）',
+                        text: '学员库）',
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -258,13 +267,12 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                       ),
                     ],
                   ),
-                  // 网格筛选器
-                  _buildSubjectGrid(),
+                  _buildSubjectSection(),
                 ] else if (widget.role == 'student') ...[
                   Row(
                     children: [
                       buildWideButton(
-                        text: '老师列表（合并）',
+                        text: '教员库',
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -283,30 +291,31 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  // 额外分类按钮
                   Row(
                     children: [
                       buildWideButton(
-                        text: '普通教员列表',
+                        text: '普通教员',
                         backgroundColor: Colors.grey,
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const TeacherListPage(isOnline: false, titleFilter: 0),
+                              builder: (_) =>
+                                  const TeacherListPage(isOnline: false, titleFilter: 0),
                             ),
                           );
                         },
                       ),
                       const SizedBox(width: 12),
                       buildWideButton(
-                        text: '专业教员列表',
+                        text: '专业教员',
                         backgroundColor: Colors.blue,
                         onPressed: () {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const TeacherListPage(isOnline: false, titleFilter: 1),
+                              builder: (_) =>
+                                  const TeacherListPage(isOnline: false, titleFilter: 1),
                             ),
                           );
                         },
@@ -319,20 +328,58 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => const TeacherListPage(isOnline: false, titleFilter: 2),
+                              builder: (_) =>
+                                  const TeacherListPage(isOnline: false, titleFilter: 2),
                             ),
                           );
                         },
                       ),
                     ],
                   ),
-                  // 网格筛选器
-                  _buildSubjectGrid(),
+                  _buildSubjectSection(),
                 ],
               ],
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SubjectPill extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _SubjectPill({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: cs.surface,
+      shape: const StadiumBorder(),
+      elevation: 0,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(32),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: ShapeDecoration(
+            shape: StadiumBorder(
+              side: BorderSide(color: cs.outlineVariant),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.1,
+              color: cs.primary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -10,8 +10,9 @@ import '../components/refresh_paged_list.dart';
 
 /// 学生需求列表页：分页 + 下拉刷新 + 触底加载 + 学段/科目/性别筛选
 class StudentListPage extends StatefulWidget {
-  final bool isOnline; // 进入页面默认tab：true=线上，false=线下
-  const StudentListPage({super.key, this.isOnline = false});
+  final bool isOnline;              // 默认tab
+  final String? subject;            // 从首页传入的科目
+  const StudentListPage({super.key, this.isOnline = false, this.subject});
 
   @override
   State createState() => _StudentListPageState();
@@ -21,14 +22,13 @@ class _StudentListPageState extends State<StudentListPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // 列表数据
   List<Map<String, dynamic>> students = [];
   String? currentUserId;
   Set<String> bookedTargetIds = {};
   String? currentProvince;
   String? currentCity;
 
-  // 统一为“全部”
+  // “全部”为不限
   String selectedPhase = '全部';
   String selectedSubject = '全部';
   String selectedGender = '全部';
@@ -53,9 +53,12 @@ class _StudentListPageState extends State<StudentListPage>
       initialIndex: widget.isOnline ? 0 : 1,
     )..addListener(() {
         if (_tabController.indexIsChanging) return;
-        _resetAndFetch(); // 切换线上/线下时重置并拉取
+        _resetAndFetch();
         setState(() {});
       });
+
+    // ← 关键：用首页传入的科目作为初始选中
+    selectedSubject = widget.subject ?? '全部';
 
     _loadUserIdAndCity();
   }
@@ -100,7 +103,6 @@ class _StudentListPageState extends State<StudentListPage>
     await _fetchStudents();
   }
 
-  /// 拉取学生列表（与后端分页结构对齐）
   Future<void> _fetchStudents({bool nextPage = false}) async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
@@ -160,7 +162,6 @@ class _StudentListPageState extends State<StudentListPage>
     }
   }
 
-  /// 预约
   Future<void> _sendAppointment(Map<String, dynamic> student) async {
     if (currentUserId == null || student['userId'] == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -207,7 +208,6 @@ class _StudentListPageState extends State<StudentListPage>
     }
   }
 
-  /// 当前用户的预约记录（用于置灰“已预约”）
   Future<void> fetchBookings(String userId) async {
     try {
       final url = Uri.parse('$apiBase/api/bookings/from/$userId');
@@ -258,7 +258,7 @@ class _StudentListPageState extends State<StudentListPage>
       ),
       body: Column(
         children: [
-          // 学段/科目/性别 筛选（统一“全部”）
+          // 只显示下拉，不显示“快捷网格”
           TeacherFilterBar(
             selectedPhase: selectedPhase,
             selectedSubject: selectedSubject,
@@ -288,8 +288,7 @@ class _StudentListPageState extends State<StudentListPage>
                     .map((e) => '${e['phase']} ${e['subject']}')
                     .join('，');
                 return Card(
-                  margin: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 8),
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: ListTile(
                     title: Text('学生：${student['name']}'),
                     subtitle: Column(

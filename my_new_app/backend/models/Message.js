@@ -20,7 +20,10 @@ const messageSchema = new mongoose.Schema({
     subjects: [subjectPairSchema],           // 科目快照 [{ phase, subject }]
     phone: { type: String },                 // 手机号（注册时的 username）
     role: { type: String, enum: ['student', 'teacher'] }, // 可选：角色标记
-  }
+  },
+
+  // 如果为 true，则该消息仅在接收用户成为会员后才会显示
+  memberOnly: { type: Boolean, default: false },
 });
 
 module.exports = mongoose.model('Message', messageSchema);

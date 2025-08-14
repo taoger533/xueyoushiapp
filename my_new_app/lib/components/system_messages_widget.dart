@@ -165,7 +165,7 @@ class SystemMessagesWidgetState extends State<SystemMessagesWidget> {
           Map<String, dynamic> extra = {};
           final rawExtra = msg['extra'];
           if (rawExtra is Map) {
-            extra = Map<String, dynamic>.from(rawExtra as Map);
+            extra = Map<String, dynamic>.from(rawExtra);
           } else if (rawExtra is String) {
             try {
               final decoded = jsonDecode(rawExtra);

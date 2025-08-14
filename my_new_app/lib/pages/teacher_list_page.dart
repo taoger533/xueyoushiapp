@@ -12,11 +12,13 @@ import '../components/refresh_paged_list.dart';
 class TeacherListPage extends StatefulWidget {
   final bool isOnline;
   final int? titleFilter;
+  final String? subject; // 从首页传入的科目
 
   const TeacherListPage({
     super.key,
     this.isOnline = false,
     this.titleFilter,
+    this.subject,
   });
 
   @override
@@ -33,7 +35,7 @@ class _TeacherListPageState extends State<TeacherListPage>
   String? currentProvince;
   String? currentCity;
 
-  // 统一为“全部”
+  // 统一“全部”
   String selectedPhase = '全部';
   String selectedSubject = '全部';
   String selectedGender = '全部';
@@ -60,6 +62,9 @@ class _TeacherListPageState extends State<TeacherListPage>
         _resetAndFetch();
         setState(() {});
       });
+
+    // ← 关键：用首页传入的科目作为初始选中
+    selectedSubject = widget.subject ?? '全部';
 
     _loadUserIdAndCity();
   }
@@ -258,14 +263,12 @@ class _TeacherListPageState extends State<TeacherListPage>
             : null,
         bottom: TabBar(
           controller: _tabController,
-          tabs: const [
-            Tab(text: '线上'),
-            Tab(text: '线下'),
-          ],
+          tabs: const [Tab(text: '线上'), Tab(text: '线下')],
         ),
       ),
       body: Column(
         children: [
+          // 只显示下拉，不显示快捷网格
           TeacherFilterBar(
             selectedPhase: selectedPhase,
             selectedSubject: selectedSubject,
