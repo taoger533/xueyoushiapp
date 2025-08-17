@@ -24,11 +24,11 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
 
   // 首页科目：与列表页筛选条保持一致
   static const List<String> _subjects = [
-    '数学','英语','语文','物理','化学',
-    '生物','地理','历史','政治','作文',
-    '奥数','钢琴','电子琴','古筝','竹笛',
-    '美术','日语','德语','法语','韩语',
-    '俄语','雅思','托福','计算机','英语口语',
+    '语文','数学','英语','物理','化学',
+    '生物','地理','历史','政治','学科竞赛',
+    '音乐','美术','体育','小语种',
+    '雅思','托福','四六级','高等数学','计算机',
+    '四六级','考研辅导','作业辅导','论文指导'
   ];
 
   @override
@@ -249,7 +249,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                   Row(
                     children: [
                       buildWideButton(
-                        text: '学员库）',
+                        text: '学员库',
                         onPressed: () {
                           Navigator.push(
                             context,
@@ -294,7 +294,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                   Row(
                     children: [
                       buildWideButton(
-                        text: '普通教员',
+                        text: '普通\n教员',
                         backgroundColor: Colors.grey,
                         onPressed: () {
                           Navigator.push(
@@ -308,7 +308,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                       ),
                       const SizedBox(width: 12),
                       buildWideButton(
-                        text: '专业教员',
+                        text: '专业\n教员',
                         backgroundColor: Colors.blue,
                         onPressed: () {
                           Navigator.push(
@@ -322,7 +322,7 @@ class _HomeTabState extends State<HomeTab> with WidgetsBindingObserver {
                       ),
                       const SizedBox(width: 12),
                       buildWideButton(
-                        text: '学霸大学生',
+                        text: '学霸\n大学生',
                         backgroundColor: Colors.green,
                         onPressed: () {
                           Navigator.push(

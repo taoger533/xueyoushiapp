@@ -16,6 +16,29 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    // ① 同账号直接拦截
+    if (fromUserId === toUserId) {
+      return res.status(400).json({ error: '不能预约自己' });
+    }
+
+    // ② 同手机号（username）拦截：允许同一手机号既有学生又有老师身份，但不能互相预约
+    const [fromUser, toUser] = await Promise.all([
+      User.findById(fromUserId).lean(),
+      User.findById(toUserId).lean(),
+    ]);
+
+    if (!fromUser || !toUser) {
+      return res.status(400).json({ error: '用户不存在，无法创建预约' });
+    }
+
+    const fromPhone = (fromUser.username || '').trim();
+    const toPhone   = (toUser.username || '').trim();
+
+    if (fromPhone && toPhone && fromPhone === toPhone) {
+      return res.status(400).json({ error: '不能预约自己（同一手机号）' });
+    }
+
+    // 通过校验后创建预约
     const booking = new Booking({ fromUserId, toUserId, targetType, targetId, targetInfo });
     await booking.save();
     res.status(201).json(booking);
@@ -25,13 +48,50 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 获取用户收到的预约请求
+// 获取用户收到的预约请求 —— 增加 initiatorInfo
 router.get('/to/:userId', async (req, res) => {
   try {
-    const bookings = await Booking
-      .find({ toUserId: req.params.userId })
-      .populate('fromUserId');
-    res.json(bookings);
+    const bookings = await Booking.find({ toUserId: req.params.userId }).lean();
+
+    const enriched = await Promise.all(
+      bookings.map(async (b) => {
+        let initiatorInfo = null;
+        try {
+          if (b.targetType === 'teacher') {
+            // 发起者是学生
+            const student = await Student.findOne({ userId: b.fromUserId }).lean();
+            if (student) {
+              initiatorInfo = {
+                role: 'student',
+                name: student.name,
+                gender: student.gender,
+                subjects: student.subjects,
+                rateMin: student.rateMin,
+                rateMax: student.rateMax,
+              };
+            }
+          } else if (b.targetType === 'student') {
+            // 发起者是教员
+            const teacher = await Teacher.findOne({ userId: b.fromUserId }).lean();
+            if (teacher) {
+              initiatorInfo = {
+                role: 'teacher',
+                name: teacher.name,
+                gender: teacher.gender,
+                subjects: teacher.subjects,
+                rateMin: teacher.rateMin,
+                rateMax: teacher.rateMax,
+              };
+            }
+          }
+        } catch (e) {
+          console.error('组装 initiatorInfo 失败:', e);
+        }
+        return { ...b, initiatorInfo };
+      })
+    );
+
+    res.json(enriched);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: '获取预约失败' });
@@ -69,10 +129,12 @@ router.patch('/:id', async (req, res) => {
       if (booking.targetType === 'teacher') {
         const teacher = await Teacher.findById(booking.targetId).lean();
         const student = await Student.findOne({ userId: booking.fromUserId }).lean();
+        if (!teacher || !student) {
+          return res.status(400).json({ error: '信息不完整，无法确认预约' });
+        }
         const teacherUser = await User.findById(teacher.userId).lean();
         const studentUser = await User.findById(student.userId).lean();
-
-        if (!teacher || !student || !teacherUser || !studentUser) {
+        if (!teacherUser || !studentUser) {
           return res.status(400).json({ error: '信息不完整，无法确认预约' });
         }
 
@@ -106,10 +168,12 @@ router.patch('/:id', async (req, res) => {
       } else if (booking.targetType === 'student') {
         const student = await Student.findById(booking.targetId).lean();
         const teacher = await Teacher.findOne({ userId: booking.fromUserId }).lean();
+        if (!teacher || !student) {
+          return res.status(400).json({ error: '信息不完整，无法确认预约' });
+        }
         const teacherUser = await User.findById(teacher.userId).lean();
         const studentUser = await User.findById(student.userId).lean();
-
-        if (!teacher || !student || !teacherUser || !studentUser) {
+        if (!teacherUser || !studentUser) {
           return res.status(400).json({ error: '信息不完整，无法确认预约' });
         }
 

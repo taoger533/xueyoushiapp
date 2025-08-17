@@ -23,7 +23,7 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
   String? userId;
   late LocalDraftService draftService;
 
-  // —— 地区选择器状态
+  // —— 地区选择器状态（仅线下必填）
   String? _selectedProvince;
   String? _selectedCity;
 
@@ -32,7 +32,7 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadUserIdAndDraft();
-    _loadSelectedArea();  // ← 新增：初始加载本地地区
+    _loadSelectedArea(); // 恢复最近一次选择的地区
   }
 
   @override
@@ -47,7 +47,6 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
     if (state == AppLifecycleState.paused) {
       _saveLocalDraft();
     }
-    // ← 新增：从后台恢复时重新读取本地地区
     if (state == AppLifecycleState.resumed) {
       _loadSelectedArea();
     }
@@ -97,7 +96,6 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
     });
   }
 
-  /// ← 新增：从 SharedPreferences 读取已选省市
   Future<void> _loadSelectedArea() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
@@ -114,27 +112,10 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final province = prefs.getString('selected_province');
-    final city = prefs.getString('selected_city');
-
-    if (province == null || city == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先选择所在地区')),
-      );
-      return;
-    }
-
     final teacher = _formKey.currentState?.collectData();
     if (teacher == null) return;
 
-    await draftService.save(teacher.map((key, value) {
-      if (key == 'subjects') {
-        return MapEntry(key, jsonEncode(value));
-      }
-      return MapEntry(key, value.toString());
-    }));
-
+    // 非空校验（region 不在此页表单里，省市在下面按 teachMethod 判断）
     const fieldLabels = {
       'name': '称呼',
       'gender': '性别',
@@ -155,30 +136,51 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
       final text = (raw == null ? '' : raw.toString()).trim();
       final error = FieldValidators.nonEmpty(fieldName: entry.value)(text);
       if (error != null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error)));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
         return;
       }
     }
 
-    final subs = teacher['subjects'];
-    if (subs is List && subs.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('授课科目不能为空')),
-      );
-      return;
+    // 授课方式用于决定是否需要地区（“线上”不强制）
+    final teachMethod = (teacher['teachMethod'] ?? '').toString().trim();
+
+    String? province;
+    String? city;
+    if (teachMethod != '线上') {
+      final prefs = await SharedPreferences.getInstance();
+      province = prefs.getString('selected_province');
+      city = prefs.getString('selected_city');
+      if (province == null || city == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请先选择所在地区')),
+        );
+        return;
+      }
     }
 
+    // 保存草稿
+    await draftService.save(teacher.map((key, value) {
+      if (key == 'subjects') {
+        return MapEntry(key, jsonEncode(value));
+      }
+      return MapEntry(key, value.toString());
+    }));
+
+    // 注入用户和地区
     teacher['userId'] = userId;
-    teacher['province'] = province;
-    teacher['city'] = city;
+    if (province != null) teacher['province'] = province;
+    if (city != null) teacher['city'] = city;
 
     try {
+      // 是否已存在
       final checkUrl = Uri.parse('$apiBase/api/teachers/user/$userId');
       final checkResp = await http.get(checkUrl);
 
       late http.Response response;
+      bool isUpdate = false;
+
       if (checkResp.statusCode == 200) {
+        isUpdate = true;
         final existing = jsonDecode(checkResp.body);
         final existingId = existing['_id'] as String;
         final putUrl = Uri.parse('$apiBase/api/teachers/$existingId');
@@ -197,13 +199,48 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
       }
 
       if (response.statusCode == 201 || response.statusCode == 200) {
+        // —— 解析后端返回的审核结果
+        String reviewStatus = '';
+        String reviewMessage = '';
+        try {
+          final respJson = jsonDecode(response.body);
+          reviewStatus = (respJson['reviewStatus'] ?? '').toString();
+          reviewMessage = (respJson['reviewMessage'] ?? '').toString();
+        } catch (_) {}
+
+        final baseMsg = isUpdate ? '教员信息已更新' : '教员信息已发布';
+        String reviewPart = '';
+        if (reviewStatus.isNotEmpty) {
+          if (reviewStatus == 'approved') {
+            reviewPart = '（审核：通过）';
+          } else if (reviewStatus == 'rejected') {
+            reviewPart = reviewMessage.isNotEmpty
+                ? '（审核：驳回，$reviewMessage）'
+                : '（审核：驳回）';
+          }
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(checkResp.statusCode == 200
-                ? '教员信息已更新'
-                : '教员信息已发布'),
-          ),
+          SnackBar(content: Text('$baseMsg$reviewPart')),
         );
+
+        // 若被驳回，弹窗显示原因（不强制返回上一页，用户可继续修改）
+        if (reviewStatus == 'rejected' && reviewMessage.isNotEmpty) {
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('自动审核结果'),
+              content: Text(reviewMessage),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('我知道了'),
+                ),
+              ],
+            ),
+          );
+        }
+
         Navigator.pop(context);
       } else {
         final data = jsonDecode(response.body);
@@ -259,6 +296,10 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
 
   @override
   Widget build(BuildContext context) {
+    final title = _selectedProvince == null
+        ? '登记教员信息'
+        : '登记教员信息 ($_selectedProvince${_selectedCity != null ? '·$_selectedCity' : ''})';
+
     return WillPopScope(
       onWillPop: () async {
         await _saveLocalDraft();
@@ -266,11 +307,7 @@ class _PublishTeacherPageState extends State<PublishTeacherPage>
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            _selectedProvince == null
-                ? '登记教员信息'
-                : '登记教员信息 ($_selectedProvince${_selectedCity != null ? '·$_selectedCity' : ''})',
-          ),
+          title: Text(title),
           actions: [
             Padding(
               padding: const EdgeInsets.only(right: 8.0),

@@ -116,25 +116,33 @@ class _PublishStudentPageState extends State<PublishStudentPage>
       return;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    final province = prefs.getString('selected_province');
-    final city = prefs.getString('selected_city');
-
-    if (province == null || city == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先选择所在地区')),
-      );
-      return;
-    }
-
     final formData = _formKey.currentState?.collectData();
     if (formData == null) return;
 
-    // 注入公开选项和地区、userId
+    // teachMethod 用于决定是否需要地区（线上不强制）
+    final teachMethod = (formData['teachMethod'] ?? '').toString().trim();
+
+    // 仅当 teachMethod != '线上' 时才要求必须选择地区
+    String? province;
+    String? city;
+    if (teachMethod != '线上') {
+      final prefs = await SharedPreferences.getInstance();
+      province = prefs.getString('selected_province');
+      city = prefs.getString('selected_city');
+
+      if (province == null || city == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请先选择所在地区')),
+        );
+        return;
+      }
+    }
+
+    // 注入公开选项和地区、userId（线上时允许 province/city 为空）
     formData['isPublic'] = _isPublic;
     formData['userId'] = userId;
-    formData['province'] = province;
-    formData['city'] = city;
+    if (province != null) formData['province'] = province;
+    if (city != null) formData['city'] = city;
 
     // 保存草稿
     await draftService.save(formData.map((key, value) {
@@ -144,7 +152,7 @@ class _PublishStudentPageState extends State<PublishStudentPage>
       return MapEntry(key, value.toString());
     }));
 
-    // 非空校验
+    // 非空校验（描述、科目等）
     const fieldLabels = {
       'name': '称呼',
       'gender': '学员性别',
@@ -160,6 +168,9 @@ class _PublishStudentPageState extends State<PublishStudentPage>
       'description': '学员详细情况',
     };
     for (final entry in fieldLabels.entries) {
+      // teachMethod 为“线上”时，region 可不校验；但为了兼容原有逻辑，这里只在键为 region 且 teachMethod == '线上' 时跳过
+      if (entry.key == 'region' && teachMethod == '线上') continue;
+
       final text = (formData[entry.key] ?? '').toString().trim();
       final error = FieldValidators.nonEmpty(fieldName: entry.value)(text);
       if (error != null) {
@@ -182,8 +193,11 @@ class _PublishStudentPageState extends State<PublishStudentPage>
       final checkResp = await http.get(checkUrl);
 
       late http.Response response;
+      bool isUpdate = false;
+
       if (checkResp.statusCode == 200) {
         // 更新
+        isUpdate = true;
         final existing = jsonDecode(checkResp.body);
         final existingId = existing['_id'] as String;
         final putUrl = Uri.parse('$apiBase/api/students/$existingId');
@@ -203,13 +217,50 @@ class _PublishStudentPageState extends State<PublishStudentPage>
       }
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        // 解析后端返回的审核信息
+        String reviewStatus = '';
+        String reviewMessage = '';
+        try {
+          final respJson = jsonDecode(response.body);
+          reviewStatus = (respJson['reviewStatus'] ?? '').toString();
+          reviewMessage = (respJson['reviewMessage'] ?? '').toString();
+        } catch (_) {}
+
+        final baseMsg = isUpdate ? '需求信息已更新' : '需求信息已发布';
+        String reviewPart = '';
+        if (reviewStatus.isNotEmpty) {
+          if (reviewStatus == 'approved') {
+            reviewPart = '（审核：通过）';
+          } else if (reviewStatus == 'rejected') {
+            // 如果被拒绝，带上简短原因
+            reviewPart = reviewMessage.isNotEmpty
+                ? '（审核：驳回，$reviewMessage）'
+                : '（审核：驳回）';
+          }
+        }
+
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(checkResp.statusCode == 200
-                ? '需求信息已更新'
-                : '需求信息已发布'),
-          ),
+          SnackBar(content: Text('$baseMsg$reviewPart')),
         );
+
+        // 若被驳回，可选：额外弹窗详细原因（保留草稿）
+        if (reviewStatus == 'rejected' && reviewMessage.isNotEmpty) {
+          // 只提示，不阻止返回；你也可以选择不返回上一页
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('自动审核结果'),
+              content: Text(reviewMessage),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('我知道了'),
+                ),
+              ],
+            ),
+          );
+        }
+
         Navigator.pop(context);
       } else {
         final err = jsonDecode(response.body);
@@ -235,6 +286,7 @@ class _PublishStudentPageState extends State<PublishStudentPage>
         }
         return MapEntry(key, value.toString());
       }));
+      // 这里会在返回/切后台也触发，频繁提示可能打扰；若不想提示可去掉这段 SnackBar
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('信息已保存到本地')),
       );

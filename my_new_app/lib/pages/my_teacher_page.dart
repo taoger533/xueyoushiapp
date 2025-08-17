@@ -107,12 +107,12 @@ class _MyTeachersPageState extends State<MyTeachersPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('我的老师')),
+      appBar: AppBar(title: const Text('待试课老师')),
       backgroundColor: Colors.white,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _teachers.isEmpty
-              ? const Center(child: Text('暂无已确认的教员'))
+              ? const Center(child: Text('暂无待试课的老师'))
               : RefreshIndicator(
                   onRefresh: _loadTeachers,
                   child: ListView.builder(

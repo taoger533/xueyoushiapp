@@ -200,7 +200,7 @@ class _MyScreenState extends State<MyScreen> {
               const Divider(),
               ListTile(
                 leading: const Icon(Icons.people),
-                title: const Text('我的学生'),
+                title: const Text('待试课学生'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.push(
@@ -212,7 +212,7 @@ class _MyScreenState extends State<MyScreen> {
             ] else if (_role == 'student') ...[
               ListTile(
                 leading: const Icon(Icons.school),
-                title: const Text('我的老师'),
+                title: const Text('待试课老师'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
                   Navigator.push(
