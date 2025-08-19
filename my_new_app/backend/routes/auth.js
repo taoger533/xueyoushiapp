@@ -56,7 +56,10 @@ router.post('/login', async (req, res) => {
     isMember: user.isMember ?? false,
     titles,
     titleCode: user.titleCode ?? 0,
-    acceptingStudents: user.acceptingStudents ?? false
+    acceptingStudents: user.acceptingStudents ?? false,
+    goodReviewCount: user.role === 'teacher'                 // NEW（可选，但有用）
+      ? (typeof user.goodReviewCount === 'number' ? user.goodReviewCount : 0)
+      : null,
   });
 });
 
@@ -102,13 +105,19 @@ router.get('/user-info/:id', async (req, res) => {
       ? titleCodeMap[user.titleCode] || ['普通教员']
       : [];
 
+    // NEW: 返回好评数（教师默认 0；学生可为 null）
+    const goodReviewCount = user.role === 'teacher'
+      ? (typeof user.goodReviewCount === 'number' ? user.goodReviewCount : 0)
+      : null;
+
     res.json({
       isMember: user.isMember ?? false,
       titles,
       titleCode: user.titleCode ?? 0,
       rating: user.rating ?? 0,
-      studentsCount: user.studentsCount ?? 0,
-      acceptingStudents: user.acceptingStudents ?? false
+      studentsCount: user.studentsCount ?? 0, // 如需更真实统计，可用 ConfirmedBooking 去重计算
+      acceptingStudents: user.acceptingStudents ?? false,
+      goodReviewCount, // NEW
     });
   } catch (e) {
     console.error('获取用户信息失败:', e);
@@ -116,24 +125,43 @@ router.get('/user-info/:id', async (req, res) => {
   }
 });
 
-// 更新教师“接收学生”状态接口
+// 更新用户信息接口（支持 acceptingStudents / isMember）
 router.patch('/user-info/:id', async (req, res) => {
   const { id } = req.params;
-  const { acceptingStudents } = req.body;
-  if (typeof acceptingStudents !== 'boolean') {
+  const { acceptingStudents, isMember } = req.body; // CHANGED
+
+  // CHANGED: 宽松校验两种布尔字段（只要传了就必须是布尔）
+  if (typeof acceptingStudents !== 'undefined' && typeof acceptingStudents !== 'boolean') {
     return res.status(400).json({ error: 'acceptingStudents 字段必须为布尔值' });
   }
+  if (typeof isMember !== 'undefined' && typeof isMember !== 'boolean') {
+    return res.status(400).json({ error: 'isMember 字段必须为布尔值' });
+  }
+
   try {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ error: '用户不存在' });
-    if (user.role !== 'teacher') {
-      return res.status(403).json({ error: '只有教师用户可以更改此状态' });
+
+    // 只有教师能改 acceptingStudents；isMember 两端都允许
+    if (typeof acceptingStudents !== 'undefined') {
+      if (user.role !== 'teacher') {
+        return res.status(403).json({ error: '只有教师用户可以更改接收学生状态' });
+      }
+      user.acceptingStudents = acceptingStudents;
     }
-    user.acceptingStudents = acceptingStudents;
+
+    if (typeof isMember !== 'undefined') {
+      user.isMember = isMember;
+    }
+
     await user.save();
-    res.json({ message: '接收学生状态更新成功', acceptingStudents: user.acceptingStudents });
+    res.json({
+      message: '用户信息更新成功',
+      acceptingStudents: user.acceptingStudents ?? false,
+      isMember: user.isMember ?? false,
+    });
   } catch (e) {
-    console.error('更新接收学生状态失败:', e);
+    console.error('更新用户信息失败:', e);
     res.status(500).json({ error: '服务器错误' });
   }
 });

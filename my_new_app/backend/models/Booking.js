@@ -5,7 +5,7 @@ const bookingSchema = new mongoose.Schema({
   toUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   targetType: { type: String, enum: ['student', 'teacher'], required: true },
   targetId: { type: mongoose.Schema.Types.ObjectId, required: true },
-  status: { type: String, enum: ['pending', 'confirmed', 'rejected'], default: 'pending' },
+  status: { type: String, enum: ['待处理', 'confirmed', 'rejected'], default: 'pending' },
   createdAt: { type: Date, default: Date.now },
 
   // 目标信息快照，subjects 为对象数组

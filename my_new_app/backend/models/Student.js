@@ -80,7 +80,7 @@ const studentSchema = new mongoose.Schema({
   },
   description: {
     type: String,
-    required: [true, '学员详细情况不能为空'],
+    required: [true, '学员详细情况不能为空'], // 审核只针对该字段
   },
   province: {
     type: String,
@@ -96,6 +96,18 @@ const studentSchema = new mongoose.Schema({
     required: true,
     default: false,
   },
+
+  // —— 新增：审核字段（由路由调用 reviewRules.js 后写入）
+  reviewStatus: {
+    type: String,
+    enum: ['approved', 'rejected'],
+    default: 'approved',
+  },
+  reviewMessage: {
+    type: String,
+    default: '',
+  },
+
 }, {
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
 });

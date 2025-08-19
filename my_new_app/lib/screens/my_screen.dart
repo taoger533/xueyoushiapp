@@ -21,12 +21,15 @@ class MyScreen extends StatefulWidget {
 class _MyScreenState extends State<MyScreen> {
   String _role = '';
   bool _isMember = false;
-  double _rating = 0.0;
+  double _rating = 0.0; // 保留，不再展示
   int _studentsCount = 0;
   List<String> _titles = [];
   bool _acceptingStudents = false;
   bool _professionalCertified = false;
   bool _topStudentCertified = false;
+
+  // NEW: 教员好评数
+  int _goodReviewCount = 0; // 默认为 0
 
   /// 本地头衔映射
   final Map<int, List<String>> titleCodeMap = {
@@ -53,17 +56,28 @@ class _MyScreenState extends State<MyScreen> {
       final resp = await http.get(Uri.parse('$apiBase/api/user-info/$userId'));
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body);
+
+        // 安全解析好评数（兼容 int / string / null）
+        int parseGoodReviews(dynamic v) {
+          if (v is int) return v;
+          if (v is num) return v.toInt();
+          if (v is String) return int.tryParse(v) ?? 0;
+          return 0;
+        }
+
         final titleCode = data['titleCode'] ?? 0;
+        final goodReviews = parseGoodReviews(data['goodReviewCount']); // NEW
 
         setState(() {
           _role = role;
           _isMember = data['isMember'] ?? false;
-          _rating = (data['rating'] ?? 0).toDouble();
+          _rating = (data['rating'] ?? 0).toDouble(); // 保留但不展示
           _studentsCount = data['studentsCount'] ?? 0;
           _titles = titleCodeMap[titleCode] ?? ['普通教员'];
           _acceptingStudents = data['acceptingStudents'] ?? false;
           _professionalCertified = data['professionalCertified'] ?? false;
           _topStudentCertified = data['topStudentCertified'] ?? false;
+          _goodReviewCount = goodReviews; // NEW
         });
       }
     } catch (e) {
@@ -187,11 +201,18 @@ class _MyScreenState extends State<MyScreen> {
                   child: const Text('去认证'),
                 ),
               ),
+              // CHANGED: 将“评分”替换为“好评数”，直接展示后端累计的 goodReviewCount
               ListTile(
-                leading: const Icon(Icons.star_rate),
-                title: const Text('评分'),
-                trailing: Text(_rating.toStringAsFixed(1)),
+                leading: const Icon(Icons.thumb_up_alt),
+                title: const Text('好评数'),
+                trailing: Text('$_goodReviewCount'),
               ),
+              // 如果你仍然想显示原 rating，可以保留一个只读项：
+              // ListTile(
+              //   leading: const Icon(Icons.star_rate),
+              //   title: const Text('评分(历史字段)'),
+              //   trailing: Text(_rating.toStringAsFixed(1)),
+              // ),
               ListTile(
                 leading: const Icon(Icons.group),
                 title: const Text('教过的学生总数'),
@@ -228,7 +249,7 @@ class _MyScreenState extends State<MyScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const PendingReviewsScreen()),
+                    MaterialPageRoute(builder: (_) => const PendingReviewsPage()),
                   );
                 },
               ),

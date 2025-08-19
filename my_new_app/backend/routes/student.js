@@ -22,12 +22,12 @@ router.post('/', async (req, res) => {
     if (review.status === 'rejected') {
       return res.status(400).json({
         error: review.message,
-        flags: review.flags, // 可选：便于排查
-        hits: review.hits,   // 可选：便于排查
+        flags: review.flags, // 可选：方便前端或排查
+        hits: review.hits,   // 可选：方便前端或排查
       });
     }
 
-    // 审核通过：写回审核结果（模型需包含 reviewStatus 与 reviewMessage 字段）
+    // 写回审核结果（模型需包含 reviewStatus 与 reviewMessage 字段）
     const payload = {
       ...req.body,
       reviewStatus: review.status, // 'approved' | 'rejected'
@@ -73,7 +73,7 @@ router.put('/:id', async (req, res) => {
       doc[k] = req.body[k];
     });
 
-    // 只要传了“详细情况”字段，就重新审核一次
+    // 无论是否变更，只要传了“详细情况”字段，就重新审核一次
     const hasDetailInBody =
       Object.prototype.hasOwnProperty.call(req.body, 'detail') ||
       Object.prototype.hasOwnProperty.call(req.body, 'detailInfo') ||

@@ -64,11 +64,11 @@ const teacherSchema = new mongoose.Schema({
   },
   wechat: {
     type: String,
-    required: [true, '微信号不能为空'],
+    required: [true, '微信号不能为空'], // 按你的要求保留必填
   },
   description: {
     type: String,
-    required: [true, '个人自述不能为空'],
+    required: [true, '个人自述不能为空'], // 审核只针对该字段
   },
   teachMethod: {
     type: String,
@@ -83,6 +83,18 @@ const teacherSchema = new mongoose.Schema({
     type: String,
     required: [true, '城市不能为空'],
   },
+
+  // —— 新增：审核结果字段（由路由在发布/更新时写入；仅根据 description 审核）
+  reviewStatus: {
+    type: String,
+    enum: ['approved', 'rejected'],
+    default: 'approved',
+  },
+  reviewMessage: {
+    type: String,
+    default: '',
+  },
+
 }, {
   timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' },
 });

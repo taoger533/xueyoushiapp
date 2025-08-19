@@ -147,7 +147,7 @@ class _MessageScreenState extends State<MessageScreen>
     int cnt = 0;
     for (final m in list) {
       final status = (m['status'] as String?) ?? '';
-      if (status == 'pending') cnt++;
+      if (status == '待处理') cnt++;
     }
     return cnt;
   }
