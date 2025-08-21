@@ -17,7 +17,13 @@ const adminRoutes = require('./routes/admin');
 const bannersRoutes = require('./routes/banners');
 const paymentRoutes = require('./routes/payment');
 const confirmedBookingsRouter = require('./routes/confirmedBookings');
+
+// ✅ 新增：法律文档 API
+const legalRoutes = require('./routes/legal');
+
 const app = express();
+app.enable('trust proxy');
+app.use('/api/legal', require('./routes/legal'));
 
 // ✅ 中间件
 app.use(cors());
@@ -32,6 +38,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // 在项目根目录创建 public/index.html
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ✅ 新增：托管法律文档静态页（可对外链接）
+// 访问：/legal/terms.html 与 /legal/privacy.html
+app.use('/legal', express.static(path.join(__dirname, 'public','legal')));
+
 // ✅ API 路由
 app.use('/api/professional-certification', professionalCertificationRoutes);
 app.use('/api/top-student-certification', topStudentRoutes);
@@ -45,6 +55,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/banners', bannersRoutes);
 app.use('/api/payment', paymentRoutes);
 app.use('/api/confirmedBookings', confirmedBookingsRouter);
+
+// ✅ 新增：法律文档接口（App 用）
+app.use('/api/legal', legalRoutes);
+
 // ✅ 测试路由（方便手机直接访问测试）
 app.get('/ping', (req, res) => {
   res.send('pong');
@@ -58,6 +72,8 @@ mongoose.connect(process.env.MONGO_URI)
     app.listen(port, '0.0.0.0', () => {
       console.log(`✅ Server running at http://0.0.0.0:${port}`);
       console.log(`✅ Test route: http://112.124.25.171:${port}/ping`);
+      console.log(`✅ Legal terms: http://112.124.25.171:${port}/legal/terms.html`);
+      console.log(`✅ Legal privacy: http://112.124.25.171:${port}/legal/privacy.html`);
     });
   })
   .catch((err) => console.error('❌ MongoDB connection error:', err));

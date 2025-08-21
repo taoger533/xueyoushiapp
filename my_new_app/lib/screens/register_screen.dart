@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../pages/legal_doc_page.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -286,26 +287,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 16),
               Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Checkbox(
                     value: _agreedToTerms,
-                    onChanged: (value) {
-                      setState(() => _agreedToTerms = value ?? false);
+                    onChanged: (v) {
+                      setState(() {
+                        _agreedToTerms = v ?? false;
+                      });
                     },
                   ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () {
-                        // TODO: 展示用户协议
-                      },
-                      child: const Text(
-                        '我已阅读并同意《用户服务协议》',
-                        style: TextStyle(decoration: TextDecoration.underline),
-                      ),
+                  const Text('我已阅读并同意 '),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LegalDocPage(type: 'terms'),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      '《用户服务协议》',
+                      style: TextStyle(color: Colors.blue),
+                    ),
+                  ),
+                  const Text(' 和 '),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const LegalDocPage(type: 'privacy'),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      '《隐私政策》',
+                      style: TextStyle(color: Colors.blue),
                     ),
                   ),
                 ],
               ),
+
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _handleRegister,
